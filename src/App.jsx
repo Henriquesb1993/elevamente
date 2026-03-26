@@ -162,8 +162,17 @@ const fmt = (b) => b>1048576?`${(b/1048576).toFixed(1)} MB`:`${Math.round(b/1024
 // ─── EXCEL PROCESSOR ────────────────────────────────────────────────────────
 function processExcel(workbook) {
   const sheets = workbook.SheetNames;
+  // Normalize accents for sheet name matching
+  const normSheet = (s) => s.toUpperCase()
+    .normalize("NFD").replace(/[̀-ͯ]/g,"")  // remove diacritics
+    .replace(/[^A-Z0-9]/g," ");                         // non-alphanumeric → space
+
   const get = (name) => {
-    const sn = sheets.find(s => s.toUpperCase().includes(name.toUpperCase()));
+    const normName = normSheet(name);
+    // Try exact normalized match first, then partial
+    const sn = sheets.find(s => normSheet(s) === normName)
+            || sheets.find(s => normSheet(s).includes(normName))
+            || sheets.find(s => normName.split(" ").filter(Boolean).every(part => normSheet(s).includes(part)));
     if (!sn) return [];
     return XLSX.utils.sheet_to_json(workbook.Sheets[sn], { defval:"" });
   };
@@ -172,7 +181,8 @@ function processExcel(workbook) {
   const multas      = get("MULTA");
   const acidentes   = get("ACIDENTE");
   const quadro      = get("QUADRO");
-  const presenca    = get("PRESENCA") || get("PRESENÇA") || get("ELEVAMENTE");
+  // LISTA PRESENÇA ELEVAMENTE — tenta varios padroes
+  const presenca    = get("PRESENCA") || get("PRESENÇA") || get("LISTA PRESENCA") || get("LISTA PRESENÇA") || get("ELEVAMENTE") || get("PRESENCA ELEVAMENTE");
   const formulario  = get("FORMULARIO") || get("FORMULÁRIO") || get("MENTORIA");
 
   // ── Build operator map from QUADRO_FUNC ─────────────────────────────────
@@ -420,6 +430,14 @@ function processExcel(workbook) {
     name: s,
     rows: XLSX.utils.sheet_to_json(workbook.Sheets[s]).length,
   }));
+  // Debug: log what was found
+  console.log("[Elevamente] Abas encontradas:", sheets);
+  console.log("[Elevamente] Prontuario rows:", prontuario.length);
+  console.log("[Elevamente] Multas rows:", multas.length);
+  console.log("[Elevamente] Acidentes rows:", acidentes.length);
+  console.log("[Elevamente] Quadro rows:", quadro.length);
+  console.log("[Elevamente] Presenca rows:", presenca.length);
+  console.log("[Elevamente] Formulario rows:", formulario.length);
 
   return { operators, kpis:{ total, emMentoria, melhoraram, pioraram, aguardando, taxaMelhora },
            eventosMes, causas, sheetSummary };
