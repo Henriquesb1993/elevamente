@@ -1,7 +1,7 @@
 {
   "name": "elevamente",
   "version": "1.0.0",
-  "description": "Programa Elevamente",
+  "description": "Programa Elevamente — Melhora do Operador",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
