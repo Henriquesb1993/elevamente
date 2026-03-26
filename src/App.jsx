@@ -257,11 +257,25 @@ function processExcel(workbook) {
 
   // ── Multas per operator ──────────────────────────────────────────────────
   const multasCount = {};
+  const multasDetMap = {}; // re -> [{data, linha, descricao, enquadramento, valor}]
   multas.forEach(row => {
-    const reCol = findCol(row,"NREG","RE","REGISTRO","N.REG","NOREG","MATRICULA");
+    const reCol  = findCol(row,"NREG","RE","REGISTRO","N.REG","NOREG","MATRICULA","NO_REG","CHAPA");
+    const dtCol  = findCol(row,"DATA","DT","DATE","DATA_INFRACAO","DATAINFRACAO","DATAMULTA");
+    const lnCol  = findCol(row,"LINHA","PREFIXO","VEICULO","CARRO","PLACA");
+    const dsCol  = findCol(row,"DESCRICAO","DESCRICÃO","DESC","INFRACAO","INFRAÇÃO","HISTORICO","OBS","MOTIVO","TIPO");
+    const enCol  = findCol(row,"ENQUADRAMENTO","COD","CODIGO","CODINFRACAO","AIT","AUTO");
+    const vlCol  = findCol(row,"VALOR","MULTA","VALORmulta","VALORMULTA","VL_MULTA","VLMULTA");
     const re = reCol ? String(row[reCol]).trim() : null;
     if (!re) return;
     multasCount[re] = (multasCount[re]||0)+1;
+    if (!multasDetMap[re]) multasDetMap[re] = [];
+    multasDetMap[re].push({
+      data:          dtCol ? toDateStr(row[dtCol]) : "–",
+      linha:         lnCol ? String(row[lnCol]).trim() : "–",
+      descricao:     dsCol ? String(row[dsCol]).trim() : "–",
+      enquadramento: enCol ? String(row[enCol]).trim() : "–",
+      valor:         vlCol ? (parseFloat(String(row[vlCol]).replace(/[^\d,.]/g,"").replace(",",".")) || 0) : 0,
+    });
   });
 
   // ── Acidentes per operator (only "responsável") ──────────────────────────
@@ -335,11 +349,12 @@ function processExcel(workbook) {
     return {
       ...base,
       faltas, multas: multas2, suspensoes: susp, atestados: atест, acidentes: acid,
-      status:       hasMen ? "mentoria" : "aguardando",
+      status:         hasMen ? "mentoria" : "aguardando",
       resultado,
-      dataMentoria: mentoriaDate[re] || null,
+      dataMentoria:   mentoriaDate[re] || null,
       comprometimento: comp,
-      timeline:     evTimeline[re] || [],
+      timeline:       evTimeline[re] || [],
+      multasDetalhes: multasDetMap[re] || [],
     };
   }).filter(o => o.re && o.re !== "undefined" && o.re !== "");
 
@@ -359,7 +374,18 @@ function processExcel(workbook) {
     const dt = dtCol ? String(row[dtCol]).trim() : "";
     const ev = evCol ? String(row[evCol]).trim() : "";
     if (!dt || !ev) return;
-    const mes = dt.substring(0,7); // YYYY-MM or similar
+    // Normalize date to YYYY-MM regardless of format
+    let mes = "";
+    if(/^\d{4}-\d{2}/.test(dt)) {
+      mes = dt.substring(0,7); // already YYYY-MM
+    } else if(/^\d{2}\/\d{2}\/\d{4}/.test(dt)) {
+      mes = dt.substring(6,10)+"-"+dt.substring(3,5); // dd/mm/yyyy -> YYYY-MM
+    } else if(/^\d{2}\/\d{2}\/\d{2}/.test(dt)) {
+      mes = "20"+dt.substring(6,8)+"-"+dt.substring(3,5); // dd/mm/yy -> YYYY-MM
+    } else {
+      mes = dt.substring(0,7);
+    }
+    if(!mes||mes.length<7) return;
     if (!evByMonth[mes]) evByMonth[mes] = { mes, faltas:0, multas:0, acidentes:0, mentorias:0 };
     if (ev==="F") evByMonth[mes].faltas++;
     if (ev==="M") evByMonth[mes].multas++;
@@ -1473,7 +1499,7 @@ async function gerarPDFFicha(op, perda, evTipoList, totalEvs, evMesList, multasD
     doc.setFontSize(9); doc.setFont(undefined,"bold"); doc.setTextColor(60,60,60);
     doc.text(label+":", indent, y);
     doc.setFont(undefined,"normal"); doc.setTextColor(0,0,0);
-    doc.text(String(value||"–"), indent+50, y); y+=5;
+    doc.text(String(value||"-"), indent+50, y); y+=5;
   };
   const addSection = (title) => {
     y+=3;
@@ -1486,14 +1512,14 @@ async function gerarPDFFicha(op, perda, evTipoList, totalEvs, evMesList, multasD
   // Header
   doc.setFillColor(10,40,80); doc.rect(0,0,W,22,"F");
   doc.setFontSize(14); doc.setFont(undefined,"bold"); doc.setTextColor(255,255,255);
-  doc.text("PERFIL DO OPERADOR — Relatório Gerencial", 14, 10);
+  doc.text("PERFIL DO OPERADOR - Relatorio Gerencial", 14, 10);
   doc.setFontSize(9); doc.setFont(undefined,"normal"); doc.setTextColor(180,210,255);
-  doc.text(`RE ${op.re}  ·  ${op.nome}  ·  Gerado em ${new Date().toLocaleString("pt-BR")}  ·  Uso restrito — Diretoria`, 14, 17);
+  doc.text(`RE ${op.re}  ·  ${op.nome}  ·  Gerado em ${new Date().toLocaleString("pt-BR")}  ·  Uso restrito - Diretoria`, 14, 17);
   y = 28;
 
-  // Identificação
-  addSection("IDENTIFICAÇÃO DO OPERADOR");
-  const info = [["RE (NoREG)",op.re],["Função",op.funcao],["Nome",op.nome],["Garagem",op.garagem],["Admissão",op.admissao],["Status",op.status]];
+  // Identificacao
+  addSection("IDENTIFICACAO DO OPERADOR");
+  const info = [["RE (NoREG)",op.re],["Funcao",op.funcao],["Nome",op.nome],["Garagem",op.garagem],["Admissao",op.admissao],["Status",op.status]];
   doc.autoTable({ startY:y, head:[["Campo","Valor","Campo","Valor"]], body:[
     [info[0][0],info[0][1],info[1][0],info[1][1]],
     [info[2][0],info[2][1],info[3][0],info[3][1]],
@@ -1503,34 +1529,34 @@ async function gerarPDFFicha(op, perda, evTipoList, totalEvs, evMesList, multasD
 
   // Leitura gerencial
   checkPage(20);
-  addSection("PERFIL DO OPERADOR — LEITURA GERENCIAL");
+  addSection("PERFIL DO OPERADOR - LEITURA GERENCIAL");
   const pontosAtencao=[];
   if((op.faltas||0)>=10) pontosAtencao.push(`faltas (${op.faltas} dia(s))`);
   if(multasVal>0) pontosAtencao.push(`multas (${multasDet.length} auto(s), total ${fmtBRL(multasVal)})`);
-  if((op.suspensoes||0)>=1) pontosAtencao.push(`suspensões (${op.suspensoes})`);
+  if((op.suspensoes||0)>=1) pontosAtencao.push(`suspensoes (${op.suspensoes})`);
   if((op.acidentes||0)>=1) pontosAtencao.push(`acidentes com responsabilidade`);
-  if(!op.dataMentoria) pontosAtencao.push("ausência de mentorias registradas");
-  const leitura = `Operador com tempo de casa referenciado. Foram identificados ${totalEvs} evento(s) na base de prontuários${evTipoList.length?`, com distribuição: ${evTipoList.map(e=>`${e.ev}=${e.qtd}`).join("; ")}.`:"."} ${pontosAtencao.length?"Pontos de atenção: "+pontosAtencao.join(", ")+".":""} Perda financeira estimada: ${fmtBRL(perda.totalGeral)}.`;
+  if(!op.dataMentoria) pontosAtencao.push("ausencia de mentorias registradas");
+  const leitura = `Operador com tempo de casa referenciado. Foram identificados ${totalEvs} evento(s) na base de prontuarios${evTipoList.length?`, com distribuicao: ${evTipoList.map(e=>`${e.ev}=${e.qtd}`).join("; ")}.`:"."} ${pontosAtencao.length?"Pontos de atencao: "+pontosAtencao.join(", ")+".":""} Perda financeira estimada: ${fmtBRL(perda.totalGeral)}.`;
   doc.setFontSize(9); doc.setFont(undefined,"normal"); doc.setTextColor(40,40,40);
   const split = doc.splitTextToSize(leitura, W-28);
   doc.text(split, 14, y); y+=split.length*4.5+4;
 
   // Eventos por tipo
   checkPage(30);
-  addSection("EVENTOS POR TIPO (EV) — CONTAGEM");
+  addSection("EVENTOS POR TIPO (EV) - CONTAGEM");
   doc.autoTable({ startY:y,
-    head:[["EV","Descrição do EV","Quantidade"]],
+    head:[["EV","Descricao do EV","Quantidade"]],
     body:[...evTipoList.map(e=>[e.ev, e.label||e.ev, e.qtd]),["","TOTAL GERAL",totalEvs]],
     theme:"striped", headStyles:{fillColor:[0,60,120],textColor:255,fontSize:9},
     bodyStyles:{fontSize:9}, margin:{left:14,right:14}, tableWidth:W-28,
     foot:[["","TOTAL GERAL",totalEvs]], footStyles:{fontStyle:"bold",fillColor:[230,240,255]} });
   y = doc.lastAutoTable.finalY + 6;
 
-  // Eventos por mês
+  // Eventos por mes
   if(evMesList.length>0){
     checkPage(40);
-    addSection("EVENTOS POR MÊS/ANO");
-    doc.autoTable({ startY:y, head:[["Mês/Ano","F","M","S","T","Total"]],
+    addSection("EVENTOS POR MES/ANO");
+    doc.autoTable({ startY:y, head:[["Mes/Ano","F","M","S","T","Total"]],
       body:[...evMesList.map(m=>[m.mes,m.F||0,m.M||0,m.S||0,m.T||0,m.total||0]),
         ["TOTAL GERAL",evMesList.reduce((a,m)=>a+(m.F||0),0),evMesList.reduce((a,m)=>a+(m.M||0),0),evMesList.reduce((a,m)=>a+(m.S||0),0),evMesList.reduce((a,m)=>a+(m.T||0),0),totalEvs]],
       theme:"striped", headStyles:{fillColor:[0,60,120],textColor:255,fontSize:9},
@@ -1540,12 +1566,12 @@ async function gerarPDFFicha(op, perda, evTipoList, totalEvs, evMesList, multasD
 
   // Multas
   checkPage(30);
-  addSection("AUTOS DE INFRAÇÃO — BASE DE MULTAS");
+  addSection("AUTOS DE INFRACAO - BASE DE MULTAS");
   if(multasDet.length===0){
     doc.setFontSize(9); doc.setTextColor(80,80,80);
-    doc.text("Não há autos de infração registrados.", 14, y); y+=8;
+    doc.text("Nao ha autos de infracao registrados.", 14, y); y+=8;
   } else {
-    doc.autoTable({ startY:y, head:[["Data","Linha","Descrição","Enquadramento","Valor (R$)"]],
+    doc.autoTable({ startY:y, head:[["Data","Linha","Descricao","Enquadramento","Valor (R$)"]],
       body:[...multasDet.map(m=>[m.data,m.linha,m.descricao,m.enquadramento,fmtBRL(m.valor)]),
         ["","","","Total em multas:",fmtBRL(multasVal)]],
       theme:"grid", headStyles:{fillColor:[0,60,120],textColor:255,fontSize:8},
@@ -1557,7 +1583,7 @@ async function gerarPDFFicha(op, perda, evTipoList, totalEvs, evMesList, multasD
   doc.addPage(); y=14;
   addSection("PERDA FINANCEIRA");
   doc.autoTable({ startY:y,
-    head:[["Descrição","Qtd.","Item","Valor Un. (R$)","Total Perda (R$)"]],
+    head:[["Descricao","Qtd.","Item","Valor Un. (R$)","Total Perda (R$)"]],
     body:[...perda.itens.map(i=>[i.desc,i.qtd,i.un,fmtBRL(i.valorUn),fmtBRL(i.total)]),
       ["","","","TOTAL GERAL:",fmtBRL(perda.totalGeral)]],
     theme:"grid", headStyles:{fillColor:[0,60,120],textColor:255,fontSize:8},
@@ -1565,21 +1591,21 @@ async function gerarPDFFicha(op, perda, evTipoList, totalEvs, evMesList, multasD
     footStyles:{fontStyle:"bold"} });
   y = doc.lastAutoTable.finalY + 6;
 
-  // Regra férias
+  // Regra ferias
   checkPage(20);
   doc.setFontSize(8); doc.setTextColor(80,80,80); doc.setFont(undefined,"italic");
-  doc.text("Regra (faltas × férias): Até 5→30d · 6–14→24d (perde 6) · 15–23→18d (perde 12) · 24–32→12d (perde 18) · 33+→0d (perde 30).", 14, y); y+=8;
+  doc.text("Regra (faltas × ferias): Ate 5→30d · 6-14→24d (perde 6) · 15-23→18d (perde 12) · 24-32→12d (perde 18) · 33+→0d (perde 30).", 14, y); y+=8;
 
-  // Parâmetros usados
+  // Parametros usados
   checkPage(20);
-  addSection("PARÂMETROS UTILIZADOS NO CÁLCULO");
-  doc.autoTable({ startY:y, head:[["Parâmetro","Valor"]],
+  addSection("PARAMETROS UTILIZADOS NO CALCULO");
+  doc.autoTable({ startY:y, head:[["Parametro","Valor"]],
     body:[
-      ["Valor diário ("+op.funcao+")", fmtBRL(perda.valorDiario)],
-      ["Vale Refeição (VR/dia)", fmtBRL(custos.valorVR)],
+      ["Valor diario ("+op.funcao+")", fmtBRL(perda.valorDiario)],
+      ["Vale Refeicao (VR/dia)", fmtBRL(custos.valorVR)],
       ["Vale Transporte (VT/dia)", fmtBRL(custos.valorVT||0)],
       ["Hora extra substituto", fmtBRL(custos.valorHoraExtra||0)],
-      ["FGTS sobre férias (%)", (custos.percFGTS||0)+"%"],
+      ["FGTS sobre ferias (%)", (custos.percFGTS||0)+"%"],
       ["13º proporcional (%)", (custos.perc13||0)+"%"],
     ], theme:"striped", headStyles:{fillColor:[0,60,120],textColor:255,fontSize:8},
     bodyStyles:{fontSize:9}, margin:{left:14,right:14}, tableWidth:W-28 });
@@ -1588,18 +1614,18 @@ async function gerarPDFFicha(op, perda, evTipoList, totalEvs, evMesList, multasD
   // Mentorias
   if(relatos.length>0){
     doc.addPage(); y=14;
-    addSection("RELATÓRIO DE MENTORIAS");
+    addSection("RELATORIO DE MENTORIAS");
     relatos.forEach((r,i)=>{
       checkPage(30);
       doc.setFontSize(9); doc.setFont(undefined,"bold"); doc.setTextColor(0,60,120);
-      doc.text(`Sessão ${i+1} — ${r.data} · ${r.tipoAcomp||"Sozinho"}: ${r.acompanhante||"–"} · Comprometimento: ${r.comprometimento}/5`, 14, y); y+=5;
+      doc.text(`Sessao ${i+1} - ${r.data} · ${r.tipoAcomp||"Sozinho"}: ${r.acompanhante||"-"} · Comprometimento: ${r.comprometimento}/5`, 14, y); y+=5;
       doc.setFont(undefined,"bold"); doc.setTextColor(60,60,60); doc.text("Causa:", 14, y);
       doc.setFont(undefined,"normal"); doc.setTextColor(0,0,0);
-      const cs=doc.splitTextToSize(r.causa||"–", W-28); doc.text(cs,14,y+4); y+=cs.length*4+6;
+      const cs=doc.splitTextToSize(r.causa||"-", W-28); doc.text(cs,14,y+4); y+=cs.length*4+6;
       checkPage(20);
       doc.setFont(undefined,"bold"); doc.setTextColor(60,60,60); doc.text("Relato:", 14, y);
       doc.setFont(undefined,"normal"); doc.setTextColor(0,0,0);
-      const rs=doc.splitTextToSize(r.relato||"–", W-28); doc.text(rs,14,y+4); y+=rs.length*4+8;
+      const rs=doc.splitTextToSize(r.relato||"-", W-28); doc.text(rs,14,y+4); y+=rs.length*4+8;
     });
   }
 
@@ -1608,9 +1634,9 @@ async function gerarPDFFicha(op, perda, evTipoList, totalEvs, evMesList, multasD
   for(let i=1;i<=pageCount;i++){
     doc.setPage(i);
     doc.setFontSize(7); doc.setTextColor(150,150,150); doc.setFont(undefined,"normal");
-    doc.text(`Gerado em ${new Date().toLocaleString("pt-BR")} — Sistema: Elevamente (IA)`, 14, doc.internal.pageSize.getHeight()-8);
-    doc.text(`Página ${i} de ${pageCount}`, W-30, doc.internal.pageSize.getHeight()-8);
-    doc.text("Uso restrito — Diretoria", W/2, doc.internal.pageSize.getHeight()-8, {align:"center"});
+    doc.text(`Gerado em ${new Date().toLocaleString("pt-BR")} - Sistema: Elevamente (IA)`, 14, doc.internal.pageSize.getHeight()-8);
+    doc.text(`Pagina ${i} de ${pageCount}`, W-30, doc.internal.pageSize.getHeight()-8);
+    doc.text("Uso restrito - Diretoria", W/2, doc.internal.pageSize.getHeight()-8, {align:"center"});
   }
 
   doc.save(`Ficha_${op.re}_${op.nome.split(" ")[0]}_${new Date().toLocaleDateString("pt-BR").replace(/\//g,"-")}.pdf`);
@@ -1622,13 +1648,14 @@ async function gerarPDFRelatorio(data, sessions, tratativas, custos) {
   const W = doc.internal.pageSize.getWidth();
   let y = 14;
   const ops = data.operators||[];
+  const checkPage = (need=20) => { if(y+need > doc.internal.pageSize.getHeight()-14){ doc.addPage(); y=14; }};
 
   // Header
   doc.setFillColor(10,40,80); doc.rect(0,0,W,22,"F");
   doc.setFontSize(16); doc.setFont(undefined,"bold"); doc.setTextColor(255,255,255);
-  doc.text("ELEVAMENTE — Relatório Gerencial", 14, 12);
+  doc.text("ELEVAMENTE - Relatorio Gerencial", 14, 12);
   doc.setFontSize(9); doc.setFont(undefined,"normal"); doc.setTextColor(180,210,255);
-  doc.text(`Gerado em ${new Date().toLocaleString("pt-BR")}  ·  Uso restrito — Diretoria`, 14, 19);
+  doc.text(`Gerado em ${new Date().toLocaleString("pt-BR")}  ·  Uso restrito - Diretoria`, 14, 19);
   y=28;
 
   // KPIs
@@ -1641,7 +1668,7 @@ async function gerarPDFRelatorio(data, sessions, tratativas, custos) {
     body:[
       ["Total Operadores",total,"Em Mentoria",emM],
       ["Melhoraram",melh,"Pioraram",pior],
-      ["Taxa de Melhora",taxa+"%","Total Sessões",sessions.length],
+      ["Taxa de Melhora",taxa+"%","Total Sessoes",sessions.length],
       ["Perda Total Estimada",fmtBRL(perdaTotal),"Total Tratativas",tratativas.length],
     ], theme:"grid", headStyles:{fillColor:[0,60,120],textColor:255,fontSize:9},
     bodyStyles:{fontSize:10,fontStyle:"bold"}, margin:{left:14,right:14}, tableWidth:W-28 });
@@ -1652,7 +1679,7 @@ async function gerarPDFRelatorio(data, sessions, tratativas, custos) {
   doc.setFontSize(12); doc.setFont(undefined,"bold"); doc.setTextColor(0,60,120);
   doc.text("■ Ranking de Operadores por Risco", 14, y); y+=7;
   const ranking=[...ops].map(op=>{const score=(op.faltas||0)*3+(op.multas||0)*2+(op.suspensoes||0)*5+(op.acidentes||0)*4;return{...op,score};}).sort((a,b)=>b.score-a.score).slice(0,15);
-  doc.autoTable({ startY:y, head:[["#","RE","Nome","Garagem","Função","Faltas","Multas","Susp","Acid","Score","Status","Perda Est. (R$)"]],
+  doc.autoTable({ startY:y, head:[["#","RE","Nome","Garagem","Funcao","Faltas","Multas","Susp","Acid","Score","Status","Perda Est. (R$)"]],
     body:ranking.map((op,i)=>{const f=op.faltas||0,at=op.atestados||0,vd=getValorDia(op.funcao,custos),dsr=Math.round(f*0.70),fp=f<=5?0:f<=14?6:f<=23?12:f<=32?18:30;const perda=f*vd+dsr*vd+fp*vd+fp*(vd/3)+at*(custos.valorVR||0)+(op.multasValor||0);return[i+1,op.re,op.nome,op.garagem,op.funcao,op.faltas||0,op.multas||0,op.suspensoes||0,op.acidentes||0,op.score,op.status,fmtBRL(perda)];}),
     theme:"striped", headStyles:{fillColor:[0,60,120],textColor:255,fontSize:8},
     bodyStyles:{fontSize:8}, margin:{left:14,right:14}, tableWidth:W-28 });
@@ -1661,9 +1688,9 @@ async function gerarPDFRelatorio(data, sessions, tratativas, custos) {
   // Tratativas por setor
   doc.addPage(); y=14;
   doc.setFontSize(13); doc.setFont(undefined,"bold"); doc.setTextColor(0,60,120);
-  doc.text("■ TRATATIVAS — Resumo por Setor", 14, y); y+=9;
+  doc.text("■ TRATATIVAS - Resumo por Setor", 14, y); y+=9;
 
-  // Resumo por área
+  // Resumo por area
   const setoresStats = Object.values(
     tratativas.reduce((acc,t)=>{
       if(!acc[t.area]) acc[t.area]={area:t.area,total:0,pendente:0,andamento:0,concluido:0};
@@ -1674,7 +1701,7 @@ async function gerarPDFRelatorio(data, sessions, tratativas, custos) {
   );
   doc.autoTable({
     startY:y,
-    head:[["Setor","Total","Pendentes","Em Andamento","Concluídas","% Conclusão"]],
+    head:[["Setor","Total","Pendentes","Em Andamento","Concluidas","% Conclusao"]],
     body:setoresStats.map(s=>[
       s.area,
       s.total,
@@ -1697,18 +1724,18 @@ async function gerarPDFRelatorio(data, sessions, tratativas, custos) {
   const totAnd  = tratativas.filter(t=>t.status==="andamento").length;
   const totConc = tratativas.filter(t=>t.status==="concluido").length;
   doc.setFontSize(10); doc.setFont(undefined,"normal"); doc.setTextColor(50,50,50);
-  doc.text(`Total geral: ${tratativas.length}  |  Pendentes: ${totPend}  |  Em Andamento: ${totAnd}  |  Concluídas: ${totConc}`, 14, y); y+=10;
+  doc.text(`Total geral: ${tratativas.length}  |  Pendentes: ${totPend}  |  Em Andamento: ${totAnd}  |  Concluidas: ${totConc}`, 14, y); y+=10;
 
   // Tabela detalhada
   checkPage(30);
   doc.setFontSize(11); doc.setFont(undefined,"bold"); doc.setTextColor(0,60,120);
-  doc.text("■ TRATATIVAS — Detalhamento Completo", 14, y); y+=7;
+  doc.text("■ TRATATIVAS - Detalhamento Completo", 14, y); y+=7;
   doc.autoTable({
     startY:y,
-    head:[["RE","Nome","Área","Subárea","Data","Prazo","Prioridade","Status","Retorno"]],
+    head:[["RE","Nome","Area","Subarea","Data","Prazo","Prioridade","Status","Retorno"]],
     body:tratativas.map(t=>[
-      t.re, t.nome, t.area, t.subarea||"–", t.data,
-      t.prazo||"–", t.prioridade, t.status, t.retorno?"Sim":"Não"
+      t.re, t.nome, t.area, t.subarea||"-", t.data,
+      t.prazo||"-", t.prioridade, t.status, t.retorno?"Sim":"Nao"
     ]),
     theme:"striped",
     headStyles:{fillColor:[0,60,120],textColor:255,fontSize:7,fontStyle:"bold"},
@@ -1726,7 +1753,7 @@ async function gerarPDFRelatorio(data, sessions, tratativas, custos) {
   const pageCount=doc.internal.getNumberOfPages();
   for(let i=1;i<=pageCount;i++){
     doc.setPage(i); doc.setFontSize(7); doc.setTextColor(150,150,150);
-    doc.text(`Elevamente · Página ${i} de ${pageCount}`, W/2, doc.internal.pageSize.getHeight()-6, {align:"center"});
+    doc.text(`Elevamente · Pagina ${i} de ${pageCount}`, W/2, doc.internal.pageSize.getHeight()-6, {align:"center"});
   }
   doc.save(`Elevamente_Relatorio_${new Date().toLocaleDateString("pt-BR").replace(/\//g,"-")}.pdf`);
 }
@@ -1734,13 +1761,13 @@ async function gerarPDFRelatorio(data, sessions, tratativas, custos) {
 // ─── MOCK MULTAS DETAIL ───────────────────────────────────────────────────────
 const MULTAS_DETAIL_MOCK = {
   "RE5319":[
-    {data:"27/02/25",linha:"967A",descricao:"Cinto de segurança inoperante",enquadramento:"M40",valor:225.00},
+    {data:"27/02/25",linha:"967A",descricao:"Cinto de seguranca inoperante",enquadramento:"M40",valor:225.00},
     {data:"11/03/25",linha:"967A",descricao:"Farol vermelho",enquadramento:"GR37",valor:900.00},
-    {data:"13/03/25",linha:"967A",descricao:"Cinto de segurança inoperante",enquadramento:"M40",valor:225.00},
-    {data:"14/03/25",linha:"967A",descricao:"Cinto de segurança inoperante",enquadramento:"M40",valor:225.00},
+    {data:"13/03/25",linha:"967A",descricao:"Cinto de seguranca inoperante",enquadramento:"M40",valor:225.00},
+    {data:"14/03/25",linha:"967A",descricao:"Cinto de seguranca inoperante",enquadramento:"M40",valor:225.00},
   ],
   "RE4201":[
-    {data:"05/03/25",linha:"203",descricao:"Avanço de sinal vermelho",enquadramento:"Art.208",valor:293.47},
+    {data:"05/03/25",linha:"203",descricao:"Avanco de sinal vermelho",enquadramento:"Art.208",valor:293.47},
     {data:"12/03/25",linha:"203",descricao:"Uso de celular ao volante",enquadramento:"Art.252-I",valor:293.47},
   ],
 };
@@ -1779,7 +1806,7 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
 
   // Admission time
   const admDate = op.admissao ? (()=>{const p=op.admissao.split("/");return p.length===3?new Date(p[2].length===2?2000+parseInt(p[2]):parseInt(p[2]),parseInt(p[1])-1,parseInt(p[0])):null;})() : null;
-  const tempoCasa = admDate ? ((new Date()-admDate)/(365.25*24*3600*1000)).toFixed(1)+" anos" : "–";
+  const tempoCasa = admDate ? ((new Date()-admDate)/(365.25*24*3600*1000)).toFixed(1)+" anos" : "-";
 
   // Events aggregations
   const evTipo={};
@@ -1801,10 +1828,10 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
   const pontosAtencao=[];
   if(op.faltas>=10)pontosAtencao.push(`faltas (${op.faltas} dia(s) + ${perda.dsr} DSR)`);
   if(multasVal>0)pontosAtencao.push(`multas SPTrans (${multasDet.length} auto(s), total ${fmtBRL(multasVal)})`);
-  if((op.suspensoes||0)>=1)pontosAtencao.push(`suspensões (${op.suspensoes})`);
+  if((op.suspensoes||0)>=1)pontosAtencao.push(`suspensoes (${op.suspensoes})`);
   if(op.acidentes>=1)pontosAtencao.push(`acidentes com responsabilidade (${op.acidentes})`);
-  if(!op.dataMentoria)pontosAtencao.push("ausência de mentorias registradas");
-  const leituraGerencial=`Operador com tempo de casa de ${tempoCasa}. Foram identificados ${totalEvs} evento(s) na base de prontuários${evTipoList.length?`, com distribuição: ${evTipoList.map(e=>`${e.ev}=${e.qtd}`).join("; ")}.`:"."} ${pontosAtencao.length?"Pontos de atenção: "+pontosAtencao.join(", ")+".":""} Perda financeira estimada: ${fmtBRL(perda.totalGeral)}.`;
+  if(!op.dataMentoria)pontosAtencao.push("ausencia de mentorias registradas");
+  const leituraGerencial=`Operador com tempo de casa de ${tempoCasa}. Foram identificados ${totalEvs} evento(s) na base de prontuarios${evTipoList.length?`, com distribuicao: ${evTipoList.map(e=>`${e.ev}=${e.qtd}`).join("; ")}.`:"."} ${pontosAtencao.length?"Pontos de atencao: "+pontosAtencao.join(", ")+".":""} Perda financeira estimada: ${fmtBRL(perda.totalGeral)}.`;
 
   const CT2=({active,payload,label})=>{
     if(!active||!payload?.length)return null;
@@ -1819,7 +1846,7 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
   const TABS=[
     {id:"resumo",    label:"📊 Resumo & Eventos"},
     {id:"financeiro",label:"💰 Perda Financeira"},
-    {id:"multas",    label:"⚖️ Multas"},
+    {id:"multas",    label:`⚖️ Multas${multasDet.length>0?" ("+multasDet.length+")":""}`,},
     {id:"timeline",  label:"📅 Timeline"},
     {id:"mentoria",  label:"💬 Mentoria"},
     {id:"tratativas",label:"🔁 Tratativas"},
@@ -1844,10 +1871,10 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
         </button>
       </div>
 
-      {/* Custos config — mini panel redirects to Parâmetros */}
+      {/* Custos config - mini panel redirects to Parametros */}
       {editCustos&&(
         <div className="card no-print" style={{marginBottom:16,borderColor:C.gold,background:`${C.gold}06`}}>
-          <div className="ct"><span style={{width:6,height:6,borderRadius:"50%",background:C.gold,flexShrink:0}}/>⚙️ Parâmetros Financeiros em Uso</div>
+          <div className="ct"><span style={{width:6,height:6,borderRadius:"50%",background:C.gold,flexShrink:0}}/>⚙️ Parametros Financeiros em Uso</div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:12}}>
             {[
               {l:"MOT/dia",  v:fmtBRL(custos.valorDiaMOT  ||0)},
@@ -1866,8 +1893,8 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
             ))}
           </div>
           <div style={{fontSize:11,color:C.muted,borderTop:`1px solid ${C.border}`,paddingTop:8,display:"flex",alignItems:"center",gap:8}}>
-            💡 Valor diário usado nesta ficha: <strong style={{color:C.accent}}>{fmtBRL(perda.valorDiario)}</strong> ({op.funcao})
-            &nbsp;·&nbsp; Para alterar, acesse <strong style={{color:C.gold}}>⚙️ Parâmetros</strong> no menu lateral.
+            💡 Valor diario usado nesta ficha: <strong style={{color:C.accent}}>{fmtBRL(perda.valorDiario)}</strong> ({op.funcao})
+            &nbsp;·&nbsp; Para alterar, acesse <strong style={{color:C.gold}}>⚙️ Parametros</strong> no menu lateral.
             <button className="abt" style={{marginLeft:"auto",padding:"5px 12px",fontSize:11}} onClick={()=>setEditCustos(false)}>✕</button>
           </div>
         </div>
@@ -1876,7 +1903,7 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
       {/* ── HEADER ── */}
       <div className="ficha-header" style={{marginBottom:16}}>
         <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:2,color:C.muted,marginBottom:10}}>
-          PERFIL DO OPERADOR — Relatório Gerencial (Diretoria) · {op.re}
+          PERFIL DO OPERADOR - Relatorio Gerencial (Diretoria) · {op.re}
         </div>
         <div style={{display:"flex",gap:20,alignItems:"flex-start",flexWrap:"wrap"}}>
           <div className="ficha-avatar" style={{background:`${ac}20`,color:ac,border:`2px solid ${ac}40`,width:64,height:64,borderRadius:16,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:22,flexShrink:0}}>
@@ -1888,7 +1915,7 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
               <span className="re-tag">{op.re}</span>
               <span>📌 {op.funcao}</span>
               <span>🚌 Garagem {op.garagem}</span>
-              <span>📅 Admissão: {op.admissao}</span>
+              <span>📅 Admissao: {op.admissao}</span>
               <span>⏱ {tempoCasa}</span>
             </div>
             <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
@@ -1922,7 +1949,7 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
           {[
             {v:op.faltas,       l:"Faltas",      c:op.faltas>=10?C.red:op.faltas>=5?C.orange:C.muted},
             {v:op.multas,       l:"Multas",      c:op.multas>=5?C.red:op.multas>=3?C.orange:C.muted},
-            {v:op.suspensoes||0,l:"Suspensões",  c:(op.suspensoes||0)>=2?C.red:(op.suspensoes||0)>=1?C.orange:C.muted},
+            {v:op.suspensoes||0,l:"Suspensoes",  c:(op.suspensoes||0)>=2?C.red:(op.suspensoes||0)>=1?C.orange:C.muted},
             {v:op.atestados||0, l:"Atestados",   c:C.muted},
             {v:op.acidentes,    l:"Acidentes",   c:op.acidentes>=2?C.red:op.acidentes>=1?C.orange:C.muted},
           ].map(s=>(
@@ -1950,7 +1977,7 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
         <div>
           <div className="g2" style={{marginBottom:20}}>
             <div className="card">
-              <div className="ct"><span className="ctd"/>Evolução Semanal (a partir da mentoria)</div>
+              <div className="ct"><span className="ctd"/>Evolucao Semanal (a partir da mentoria)</div>
               {evChart.length>0?(
                 <><ResponsiveContainer width="100%" height={190}>
                   <LineChart data={evChart} margin={{left:-10,right:10}}>
@@ -1967,15 +1994,15 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
               ):(
                 <div style={{height:190,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:8,color:C.muted}}>
                   <div style={{fontSize:32}}>📊</div>
-                  <div style={{fontSize:13}}>{op.dataMentoria?"Dados insuficientes":"Operador ainda não passou pela mentoria"}</div>
+                  <div style={{fontSize:13}}>{op.dataMentoria?"Dados insuficientes":"Operador ainda nao passou pela mentoria"}</div>
                 </div>
               )}
             </div>
             <div className="card">
-              <div className="ct"><span className="ctd"/>■ Eventos por Tipo (EV) — Contagem</div>
+              <div className="ct"><span className="ctd"/>■ Eventos por Tipo (EV) - Contagem</div>
               <div className="tw">
                 <table>
-                  <thead><tr><th>EV</th><th>Descrição do EV</th><th style={{textAlign:"right"}}>Quantidade</th></tr></thead>
+                  <thead><tr><th>EV</th><th>Descricao do EV</th><th style={{textAlign:"right"}}>Quantidade</th></tr></thead>
                   <tbody>
                     {evTipoList.map(e=>{
                       const cor=EV_COLOR[e.ev]||C.muted;
@@ -2002,9 +2029,9 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
             </div>
           </div>
 
-          {/* Eventos por mês */}
+          {/* Eventos por mes */}
           <div className="card">
-            <div className="ct"><span className="ctd"/>■ Eventos por Mês/Ano</div>
+            <div className="ct"><span className="ctd"/>■ Eventos por Mes/Ano</div>
             {evMesList.length>0?(
               <>
                 <ResponsiveContainer width="100%" height={170}>
@@ -2015,13 +2042,13 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
                     <Tooltip content={<CT2/>}/>
                     <Bar dataKey="F" fill={C.red}    radius={[3,3,0,0]} name="Faltas"/>
                     <Bar dataKey="M" fill={C.orange} radius={[3,3,0,0]} name="Multas"/>
-                    <Bar dataKey="S" fill={C.purple} radius={[3,3,0,0]} name="Suspensões"/>
+                    <Bar dataKey="S" fill={C.purple} radius={[3,3,0,0]} name="Suspensoes"/>
                     <Bar dataKey="T" fill={C.muted}  radius={[3,3,0,0]} name="Atestados"/>
                   </BarChart>
                 </ResponsiveContainer>
                 <div className="tw" style={{marginTop:12}}>
                   <table>
-                    <thead><tr><th>Mês/Ano</th><th style={{textAlign:"center",color:C.red}}>F</th><th style={{textAlign:"center",color:C.orange}}>M</th><th style={{textAlign:"center",color:C.purple}}>S</th><th style={{textAlign:"center"}}>T</th><th style={{textAlign:"right"}}>Total</th></tr></thead>
+                    <thead><tr><th>Mes/Ano</th><th style={{textAlign:"center",color:C.red}}>F</th><th style={{textAlign:"center",color:C.orange}}>M</th><th style={{textAlign:"center",color:C.purple}}>S</th><th style={{textAlign:"center"}}>T</th><th style={{textAlign:"right"}}>Total</th></tr></thead>
                     <tbody>
                       {evMesList.map((m,i)=>(
                         <tr key={i}>
@@ -2046,7 +2073,7 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
                 </div>
               </>
             ):(
-              <div style={{padding:"24px 0",textAlign:"center",color:C.muted,fontSize:13}}>Nenhum dado disponível</div>
+              <div style={{padding:"24px 0",textAlign:"center",color:C.muted,fontSize:13}}>Nenhum dado disponivel</div>
             )}
           </div>
         </div>
@@ -2059,14 +2086,14 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
             <div style={{fontSize:36}}>💸</div>
             <div style={{flex:1}}>
               <div style={{fontFamily:"'Inter',sans-serif",fontSize:14,fontWeight:700,color:C.red,marginBottom:3}}>■ Perda Financeira Total Estimada</div>
-              <div style={{fontSize:12,color:C.muted}}>Calculado com base nos eventos registrados. Valores aproximados — utilize os custos reais do contrato coletivo.</div>
+              <div style={{fontSize:12,color:C.muted}}>Calculado com base nos eventos registrados. Valores aproximados - utilize os custos reais do contrato coletivo.</div>
             </div>
             <div style={{fontFamily:"'Inter',sans-serif",fontSize:32,fontWeight:800,color:C.red,whiteSpace:"nowrap"}}>{fmtBRL(perda.totalGeral)}</div>
           </div>
 
           {/* Custos utilizados */}
           <div style={{display:"flex",gap:12,marginBottom:20,flexWrap:"wrap"}}>
-            {[{l:"Valor Diário",v:fmtBRL(custos.valorDiario),c:C.accent},{l:"VR / Dia",v:fmtBRL(custos.valorVR),c:C.green},{l:"1/3 Férias",v:fmtBRL(custos.valorDiario/3),c:C.gold}].map(x=>(
+            {[{l:"Valor Diario",v:fmtBRL(custos.valorDiario),c:C.accent},{l:"VR / Dia",v:fmtBRL(custos.valorVR),c:C.green},{l:"1/3 Ferias",v:fmtBRL(custos.valorDiario/3),c:C.gold}].map(x=>(
               <div key={x.l} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"10px 16px",flex:1,minWidth:90}}>
                 <div style={{fontSize:11,color:C.muted,marginBottom:2}}>{x.l}</div>
                 <div style={{fontFamily:"'Inter',sans-serif",fontSize:18,fontWeight:800,color:x.c}}>{x.v}</div>
@@ -2080,7 +2107,7 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
             <div className="ct"><span className="ctd"/>Detalhamento da Perda Financeira</div>
             <div className="tw">
               <table>
-                <thead><tr><th>Descrição</th><th style={{textAlign:"center"}}>Qtd.</th><th>Item</th><th style={{textAlign:"right"}}>Valor Un.</th><th style={{textAlign:"right"}}>Total Perda</th></tr></thead>
+                <thead><tr><th>Descricao</th><th style={{textAlign:"center"}}>Qtd.</th><th>Item</th><th style={{textAlign:"right"}}>Valor Un.</th><th style={{textAlign:"right"}}>Total Perda</th></tr></thead>
                 <tbody>
                   {perda.itens.map((item,i)=>(
                     <tr key={i}>
@@ -2102,23 +2129,23 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
             </div>
           </div>
 
-          {/* Regra férias */}
+          {/* Regra ferias */}
           <div className="card">
-            <div className="ct"><span className="ctd"/>Regra de Férias por Faltas</div>
+            <div className="ct"><span className="ctd"/>Regra de Ferias por Faltas</div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:10,marginBottom:14}}>
               {[{min:0,max:5,ferias:30,perda:0},{min:6,max:14,ferias:24,perda:6},{min:15,max:23,ferias:18,perda:12},{min:24,max:32,ferias:12,perda:18},{min:33,max:999,ferias:0,perda:30}].map((f,i)=>{
                 const ativo=op.faltas>=f.min&&op.faltas<=f.max;
                 return(<div key={i} style={{background:ativo?`${C.red}18`:C.bg,border:`1px solid ${ativo?C.red:C.border}`,borderRadius:10,padding:"12px 14px",textAlign:"center",transition:"all .3s"}}>
-                  <div style={{fontSize:11,color:ativo?C.red:C.muted,fontWeight:600,marginBottom:4}}>{f.max>=999?`≥ ${f.min}`:`${f.min}–${f.max}`} faltas</div>
+                  <div style={{fontSize:11,color:ativo?C.red:C.muted,fontWeight:600,marginBottom:4}}>{f.max>=999?`≥ ${f.min}`:`${f.min}-${f.max}`} faltas</div>
                   <div style={{fontFamily:"'Inter',sans-serif",fontSize:22,fontWeight:800,color:ativo?C.red:C.muted}}>{f.ferias}d</div>
-                  <div style={{fontSize:10,color:ativo?C.red:C.muted,marginTop:2}}>{f.perda===0?"Férias integrais":`Perde ${f.perda} dias`}</div>
+                  <div style={{fontSize:10,color:ativo?C.red:C.muted,marginTop:2}}>{f.perda===0?"Ferias integrais":`Perde ${f.perda} dias`}</div>
                   {ativo&&<div style={{marginTop:6,fontSize:10,fontWeight:700,color:C.red}}>← ATUAL</div>}
                 </div>);
               })}
             </div>
             <div style={{fontSize:12,color:C.muted,padding:"10px 14px",background:C.bg,borderRadius:8}}>
-              Regra (faltas × férias): Até 5→30d · 6–14→24d (perde 6) · 15–23→18d (perde 12) · 24–32→12d (perde 18) · 33+→0d (perde 30). &nbsp;
-              Operador possui <strong style={{color:op.faltas>=33?C.red:op.faltas>=15?C.orange:C.gold}}>{op.faltas} falta(s)</strong> → perde <strong style={{color:C.red}}>{perda.ferPerd} dias de férias</strong>.
+              Regra (faltas × ferias): Ate 5→30d · 6-14→24d (perde 6) · 15-23→18d (perde 12) · 24-32→12d (perde 18) · 33+→0d (perde 30). &nbsp;
+              Operador possui <strong style={{color:op.faltas>=33?C.red:op.faltas>=15?C.orange:C.gold}}>{op.faltas} falta(s)</strong> → perde <strong style={{color:C.red}}>{perda.ferPerd} dias de ferias</strong>.
             </div>
           </div>
         </div>
@@ -2128,24 +2155,24 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
       {tab==="multas"&&(
         <div>
           <div className="card" style={{marginBottom:16}}>
-            <div className="ct"><span className="ctd"/>■ Multas SPTrans / Reclamações de Munícipe (EV=O)</div>
+            <div className="ct"><span className="ctd"/>■ Reclamacoes (EV=O)</div>
             {timeline.filter(e=>e.ev==="O").length===0
-              ?<div style={{color:C.muted,fontSize:13,padding:"12px 0"}}>✓ Não há ocorrências de reclamações de munícipe (EV=O) para este operador no período.</div>
+              ?<div style={{color:C.muted,fontSize:13,padding:"12px 0"}}>✓ Nao ha ocorrencias de reclamacoes de municipe (EV=O) para este operador no periodo.</div>
               :<div className="tw"><table>
-                <thead><tr><th>Data</th><th>Descrição</th></tr></thead>
+                <thead><tr><th>Data</th><th>Descricao</th></tr></thead>
                 <tbody>{timeline.filter(e=>e.ev==="O").map((e,i)=><tr key={i}><td style={{color:C.muted,fontSize:12}}>{e.data}</td><td>{e.historico}</td></tr>)}</tbody>
               </table></div>
             }
           </div>
           <div className="card">
             <div className="ct" style={{justifyContent:"space-between",display:"flex"}}>
-              <span style={{display:"flex",alignItems:"center",gap:8}}><span className="ctd"/>■ Autos de Infração — Base de Multas</span>
+              <span style={{display:"flex",alignItems:"center",gap:8}}><span className="ctd"/>■ Autos de Infracao - Base de Multas</span>
               {multasVal>0&&<span style={{fontFamily:"'Inter',sans-serif",fontWeight:800,color:C.red,fontSize:15}}>Total: {fmtBRL(multasVal)}</span>}
             </div>
             {multasDet.length===0
-              ?<div style={{color:C.muted,fontSize:13,padding:"12px 0"}}>✓ Nenhum auto de infração registrado para este operador.</div>
+              ?<div style={{color:C.muted,fontSize:13,padding:"12px 0"}}>✓ Nenhum auto de infracao registrado para este operador.</div>
               :<div className="tw"><table>
-                <thead><tr><th>Data da Infração</th><th>Linha</th><th>Descrição</th><th>Enquadramento</th><th style={{textAlign:"right"}}>Valor (R$)</th></tr></thead>
+                <thead><tr><th>Data da Infracao</th><th>Linha</th><th>Descricao</th><th>Enquadramento</th><th style={{textAlign:"right"}}>Valor (R$)</th></tr></thead>
                 <tbody>
                   {multasDet.map((m,i)=>(
                     <tr key={i}>
@@ -2170,7 +2197,7 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
       {/* ══ TIMELINE ══ */}
       {tab==="timeline"&&(
         <div className="card">
-          <div className="ct"><span className="ctd"/>Histórico de Eventos · {timeline.length} registros</div>
+          <div className="ct"><span className="ctd"/>Historico de Eventos · {timeline.length} registros</div>
           {timeline.length===0&&<div style={{textAlign:"center",padding:"40px 0",color:C.muted}}>Nenhum evento registrado</div>}
           <div className="timeline">
             {[...timeline].reverse().map((ev,i)=>{
@@ -2195,14 +2222,14 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
           {relatos.length===0&&(
             <div className="card" style={{textAlign:"center",padding:"48px 0"}}>
               <div style={{fontSize:40,marginBottom:10}}>💬</div>
-              <div style={{fontFamily:"'Inter',sans-serif",fontSize:16,fontWeight:700}}>{op.status==="aguardando"?"Operador ainda não passou pela mentoria":"Nenhum relato registrado"}</div>
-              <div style={{color:C.muted,fontSize:13,marginTop:6}}>{op.status==="aguardando"?"Agende uma mentoria para iniciar o acompanhamento.":"Os relatos aparecerão aqui após o preenchimento do formulário."}</div>
+              <div style={{fontFamily:"'Inter',sans-serif",fontSize:16,fontWeight:700}}>{op.status==="aguardando"?"Operador ainda nao passou pela mentoria":"Nenhum relato registrado"}</div>
+              <div style={{color:C.muted,fontSize:13,marginTop:6}}>{op.status==="aguardando"?"Agende uma mentoria para iniciar o acompanhamento.":"Os relatos aparecerao aqui apos o preenchimento do formulario."}</div>
             </div>
           )}
           {relatos.map((r,i)=>(
             <div className="card" key={i} style={{marginBottom:16,borderLeft:`3px solid ${i===0?C.accent:i===relatos.length-1?C.green:C.gold}`}}>
               <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14,flexWrap:"wrap"}}>
-                <div style={{fontFamily:"'Inter',sans-serif",fontSize:14,fontWeight:700,color:C.accent}}>Sessão {i+1}</div>
+                <div style={{fontFamily:"'Inter',sans-serif",fontSize:14,fontWeight:700,color:C.accent}}>Sessao {i+1}</div>
                 <div style={{fontSize:12,color:C.muted}}>📅 {r.data}</div>
                 {r.acompanhante!=="Sozinho"&&<div style={{fontSize:12,background:`${C.accent2}15`,border:`1px solid ${C.accent2}30`,borderRadius:6,padding:"2px 8px",color:C.accent2}}>👥 {r.acompanhante}</div>}
                 <div style={{marginLeft:"auto",display:"flex",gap:3,alignItems:"center"}}>
@@ -2217,14 +2244,14 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
                 </div>
                 <div style={{background:C.bg,borderRadius:10,padding:"12px 14px"}}>
                   <div style={{fontSize:10,color:C.muted,marginBottom:4,textTransform:"uppercase",letterSpacing:.5}}>Encaminhado para</div>
-                  <div style={{fontSize:13,fontWeight:600,color:r.setor==="–"?C.muted:C.accent}}>{r.setor}</div>
+                  <div style={{fontSize:13,fontWeight:600,color:r.setor==="-"?C.muted:C.accent}}>{r.setor}</div>
                 </div>
               </div>
               <div style={{background:C.bg,borderRadius:10,padding:"12px 14px"}}>
-                <div style={{fontSize:10,color:C.muted,marginBottom:4,textTransform:"uppercase",letterSpacing:.5}}>Relato da sessão</div>
+                <div style={{fontSize:10,color:C.muted,marginBottom:4,textTransform:"uppercase",letterSpacing:.5}}>Relato da sessao</div>
                 <div style={{fontSize:13,lineHeight:1.7}}>{r.relato}</div>
               </div>
-              {r.denuncia&&<div style={{background:`${C.red}10`,border:`1px solid ${C.red}30`,borderRadius:8,padding:"10px 14px",fontSize:12,color:C.red,marginTop:10}}>⚠️ <strong>Denúncia registrada nesta sessão.</strong></div>}
+              {r.denuncia&&<div style={{background:`${C.red}10`,border:`1px solid ${C.red}30`,borderRadius:8,padding:"10px 14px",fontSize:12,color:C.red,marginTop:10}}>⚠️ <strong>Denuncia registrada nesta sessao.</strong></div>}
             </div>
           ))}
         </div>
@@ -2240,7 +2267,7 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
             </div>
           )}
           {encamins.map((e,i)=>{
-            const st={concluido:{label:"Concluído",color:C.green,bg:`${C.green}18`},andamento:{label:"Em andamento",color:C.gold,bg:`${C.gold}18`},pendente:{label:"Pendente",color:C.red,bg:`${C.red}18`}}[e.status];
+            const st={concluido:{label:"Concluido",color:C.green,bg:`${C.green}18`},andamento:{label:"Em andamento",color:C.gold,bg:`${C.gold}18`},pendente:{label:"Pendente",color:C.red,bg:`${C.red}18`}}[e.status];
             return(<div className="enc-card" key={i}>
               <div className="enc-header">
                 <div className="enc-icon" style={{background:`${e.cor}20`,border:`1px solid ${e.cor}30`}}>{e.icon}</div>
@@ -2255,10 +2282,10 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
         </div>
       )}
 
-      {/* Rodapé */}
+      {/* Rodape */}
       <div style={{marginTop:24,padding:"12px 0",borderTop:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:11,color:C.muted}} className="no-print">
         <span>Gerado em {new Date().toLocaleString("pt-BR")} · Sistema Elevamente</span>
-        <span style={{fontStyle:"italic"}}>Uso restrito — Diretoria</span>
+        <span style={{fontStyle:"italic"}}>Uso restrito - Diretoria</span>
       </div>
     </div>
   );
@@ -2266,25 +2293,25 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
 
 // ─── MOCK SESSIONS STORE ─────────────────────────────────────────────────────
 const SESSIONS_INIT = [
-  { id:1, re:"RE5319", nome:"Carlos A. Mendes",   data:"10/01/25", acompanhante:"Esposa",  tipoAcomp:"Cônjuge",  comprometimento:4, causas:["Problemas familiares"], setor:"Psicologia", subsetor:"Psicólogo",  relato:"Relata brigas frequentes em casa. Esposa confirmou. Encaminhado para terapia de casal.", denuncia:false, status:"concluido" },
-  { id:2, re:"RE4201", nome:"Marcos P. Lima",     data:"22/01/25", acompanhante:"Sozinho", tipoAcomp:"Sozinho",  comprometimento:2, causas:["Financeiro"],          setor:"RH",          subsetor:"Orientação", relato:"Operador resistente. Dívidas consignadas. Recusou orientação de crédito.",              denuncia:false, status:"andamento" },
-  { id:3, re:"RE3887", nome:"João S. Oliveira",   data:"05/02/25", acompanhante:"Mãe",     tipoAcomp:"Familiar", comprometimento:5, causas:["Saúde / bem-estar"],   setor:"Ambulatório", subsetor:"Médico",     relato:"Crises de ansiedade. Nunca buscou tratamento. Encaminhado ao ambulatório.",            denuncia:false, status:"concluido" },
+  { id:1, re:"RE5319", nome:"Carlos A. Mendes",   data:"10/01/25", acompanhante:"Esposa",  tipoAcomp:"Conjuge",  comprometimento:4, causas:["Problemas familiares"], setor:"Psicologia", subsetor:"Psicologo",  relato:"Relata brigas frequentes em casa. Esposa confirmou. Encaminhado para terapia de casal.", denuncia:false, status:"concluido" },
+  { id:2, re:"RE4201", nome:"Marcos P. Lima",     data:"22/01/25", acompanhante:"Sozinho", tipoAcomp:"Sozinho",  comprometimento:2, causas:["Financeiro"],          setor:"RH",          subsetor:"Orientacao", relato:"Operador resistente. Dividas consignadas. Recusou orientacao de credito.",              denuncia:false, status:"andamento" },
+  { id:3, re:"RE3887", nome:"Joao S. Oliveira",   data:"05/02/25", acompanhante:"Mae",     tipoAcomp:"Familiar", comprometimento:5, causas:["Saude / bem-estar"],   setor:"Ambulatorio", subsetor:"Medico",     relato:"Crises de ansiedade. Nunca buscou tratamento. Encaminhado ao ambulatorio.",            denuncia:false, status:"concluido" },
 ];
 
-const CAUSAS_OPTIONS = ["Problemas familiares","Saúde / bem-estar","Financeiro","Conflito interno com colega","Conflito com liderança","Uso de substâncias","Problema jurídico","Luto / perda","Outros"];
+const CAUSAS_OPTIONS = ["Problemas familiares","Saude / bem-estar","Financeiro","Conflito interno com colega","Conflito com lideranca","Uso de substancias","Problema juridico","Luto / perda","Outros"];
 const SETORES_MAP = {
-  "RH":                    ["RH Geral","DP","Médico","Psicólogo"],
-  "Jurídico":              ["Análise","Mediação","Processo interno"],
-  "Planejamento":          ["Planejamento Operacional","Análise de dados","Gestão de escala"],
+  "RH":                    ["RH Geral","DP","Medico","Psicologo"],
+  "Juridico":              ["Analise","Mediacao","Processo interno"],
+  "Planejamento":          ["Planejamento Operacional","Analise de dados","Gestao de escala"],
   "Gerente Operacional":   ["Gerente G1","Gerente G2","Gerente G3","Gerente G4"],
 };
 const AREA_ICONS_MAP = {
-  "RH":"👔", "Jurídico":"⚖️", "Planejamento":"📋", "Gerente Operacional":"👨‍💼",
+  "RH":"👔", "Juridico":"⚖️", "Planejamento":"📋", "Gerente Operacional":"👨‍💼",
 };
 
 // ─── MENTORIA PAGE ─────────────────────────────────────────────────────────────
 const MentoriaPage = ({ operators, sessions, onSave }) => {
-  const STEPS = ["Identificação","Relato & Causas","Encaminhamento","Confirmação"];
+  const STEPS = ["Identificacao","Relato & Causas","Encaminhamento","Confirmacao"];
   const [step, setStep]       = useState(0);
   const [viewMode, setViewMode] = useState("lista"); // lista | novo
   const [form, setForm]       = useState({
@@ -2317,7 +2344,7 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
     const newSession = { ...form, id: Date.now(), status:"andamento" };
     onSave(newSession);
     setSaved(true);
-    toast(`Sessão de mentoria registrada para ${form.nome||form.re}!`, "success");
+    toast(`Sessao de mentoria registrada para ${form.nome||form.re}!`, "success");
     setTimeout(()=>{ setSaved(false); setViewMode("lista"); setStep(0);
       setForm({ re:"", nome:"", data:new Date().toLocaleDateString("pt-BR"),
         acompanhante:"", tipoAcomp:"Sozinho", comprometimento:0, causas:[], setor:"", subsetor:"", relato:"", denuncia:false }); }, 1800);
@@ -2330,15 +2357,15 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
       const rows = allSessions.map(s => ({
         "RE": s.re,
         "Nome": s.nome,
-        "Data da Sessão": s.data,
+        "Data da Sessao": s.data,
         "Tipo Acompanhante": s.tipoAcomp,
         "Acompanhante": s.acompanhante || "Sozinho",
         "Comprometimento (1-5)": s.comprometimento,
         "Causas Identificadas": (s.causas||[]).join("; "),
         "Relato": s.relato,
-        "Setor Encaminhado": s.setor || "–",
-        "Subsetor": s.subsetor || "–",
-        "Denúncia": s.denuncia ? "Sim" : "Não",
+        "Setor Encaminhado": s.setor || "-",
+        "Subsetor": s.subsetor || "-",
+        "Denuncia": s.denuncia ? "Sim" : "Nao",
         "Status": s.status,
       }));
 
@@ -2350,7 +2377,7 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
       ];
 
       const wb = xlsxLib.utils.book_new();
-      xlsxLib.utils.book_append_sheet(wb, ws, "Sessões Mentoria");
+      xlsxLib.utils.book_append_sheet(wb, ws, "Sessoes Mentoria");
 
       // Summary sheet
       const causasAll = allSessions.flatMap(s=>s.causas||[]);
@@ -2358,7 +2385,7 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
       causasAll.forEach(c=>{ causasCount[c]=(causasCount[c]||0)+1; });
       const summaryRows = [
         ["RESUMO GERAL",""],
-        ["Total de sessões", allSessions.length],
+        ["Total de sessoes", allSessions.length],
         ["Alto comprometimento (4-5★)", allSessions.filter(s=>s.comprometimento>=4).length],
         ["Baixo comprometimento (1-2★)", allSessions.filter(s=>s.comprometimento<=2).length],
         ["",""],
@@ -2366,7 +2393,7 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
         ...Object.entries(causasCount).sort((a,b)=>b[1]-a[1]).map(([k,v])=>[k,v]),
         ["",""],
         ["ENCAMINHAMENTOS POR SETOR","Qtd"],
-        ...Object.entries(allSessions.reduce((acc,s)=>{if(s.setor&&s.setor!=="–")acc[s.setor]=(acc[s.setor]||0)+1;return acc;},{}))
+        ...Object.entries(allSessions.reduce((acc,s)=>{if(s.setor&&s.setor!=="-")acc[s.setor]=(acc[s.setor]||0)+1;return acc;},{}))
           .sort((a,b)=>b[1]-a[1]).map(([k,v])=>[k,v]),
       ];
       const wsSumm = xlsxLib.utils.aoa_to_sheet(summaryRows);
@@ -2384,7 +2411,7 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
   const allSessions = [...sessions].reverse();
   const filtered = filterRe ? allSessions.filter(s=>s.re.toLowerCase().includes(filterRe.toLowerCase())||s.nome.toLowerCase().includes(filterRe.toLowerCase())) : allSessions;
 
-  const ST_MAP = { concluido:{label:"Concluído",color:C.green,bg:`${C.green}18`}, andamento:{label:"Em andamento",color:C.gold,bg:`${C.gold}18`}, pendente:{label:"Pendente",color:C.red,bg:`${C.red}18`} };
+  const ST_MAP = { concluido:{label:"Concluido",color:C.green,bg:`${C.green}18`}, andamento:{label:"Em andamento",color:C.gold,bg:`${C.gold}18`}, pendente:{label:"Pendente",color:C.red,bg:`${C.red}18`} };
 
   const subsetores = SETORES_MAP[form.setor] || [];
   const canNext = step===0?(form.re&&form.data):step===1?(form.causas.length>0&&form.relato.length>10):step===2?(form.setor):true;
@@ -2394,7 +2421,7 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
       {/* Header com toggle */}
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20,flexWrap:"wrap"}}>
         <div style={{fontFamily:"'Inter',sans-serif",fontSize:18,fontWeight:700}}>
-          {viewMode==="lista"?"Sessões Registradas":"Nova Sessão de Mentoria"}
+          {viewMode==="lista"?"Sessoes Registradas":"Nova Sessao de Mentoria"}
         </div>
         <div style={{flex:1}}/>
         {viewMode==="lista"
@@ -2404,17 +2431,17 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
               <button className="abt" style={{padding:"9px 20px",fontSize:13,background:`${C.green}18`,borderColor:C.green,color:C.green}}
                 onClick={()=>{setViewMode("novo");setStep(0);}}>+ Nova Mentoria</button>
             </div>
-          : <button className="abt" onClick={()=>{setViewMode("lista");setStep(0);}}>← Voltar à lista</button>
+          : <button className="abt" onClick={()=>{setViewMode("lista");setStep(0);}}>← Voltar a lista</button>
         }
       </div>
 
-      {/* ── LISTA DE SESSÕES ── */}
+      {/* ── LISTA DE SESSOES ── */}
       {viewMode==="lista" && (
         <div>
-          {/* Resumo rápido */}
+          {/* Resumo rapido */}
           <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:20}} className="men-kpi-grid">
             {[
-              {v:allSessions.length,       l:"Total de sessões",    c:C.accent},
+              {v:allSessions.length,       l:"Total de sessoes",    c:C.accent},
               {v:allSessions.filter(s=>s.comprometimento>=4).length, l:"Alto comprometimento (4-5★)", c:C.green},
               {v:allSessions.filter(s=>s.comprometimento<=2).length, l:"Baixo comprometimento (1-2★)", c:C.red},
               {v:[...new Set(allSessions.flatMap(s=>s.causas))].length, l:"Causas identificadas", c:C.gold},
@@ -2451,7 +2478,7 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
                     </div>
                     <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:8}}>
                       <span style={{fontSize:12,color:C.muted}}>👥 {s.tipoAcomp}: <strong style={{color:C.text}}>{s.acompanhante||"Sozinho"}</strong></span>
-                      <span style={{fontSize:12,color:C.muted}}>🎯 Setor: <strong style={{color:C.accent}}>{s.setor||"–"}</strong>{s.subsetor&&` / ${s.subsetor}`}</span>
+                      <span style={{fontSize:12,color:C.muted}}>🎯 Setor: <strong style={{color:C.accent}}>{s.setor||"-"}</strong>{s.subsetor&&` / ${s.subsetor}`}</span>
                     </div>
                     <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
                       {s.causas.map(c=><span key={c} style={{fontSize:11,background:`${C.purple}18`,border:`1px solid ${C.purple}30`,borderRadius:6,padding:"2px 8px",color:C.purple}}>{c}</span>)}
@@ -2463,7 +2490,7 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
                   <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
                     <div style={{display:"flex",gap:2}}>{[1,2,3,4,5].map(i=><span key={i} style={{fontSize:16,color:i<=s.comprometimento?C.gold:"#2a3a4a"}}>★</span>)}</div>
                     <div style={{fontSize:10,color:C.muted}}>comprometimento</div>
-                    {s.denuncia&&<span style={{fontSize:10,color:C.red,fontWeight:700,marginTop:4}}>⚠️ DENÚNCIA</span>}
+                    {s.denuncia&&<span style={{fontSize:10,color:C.red,fontWeight:700,marginTop:4}}>⚠️ DENUNCIA</span>}
                   </div>
                 </div>
               </div>
@@ -2473,13 +2500,13 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
           {filtered.length===0&&(
             <div style={{textAlign:"center",padding:"60px 0",opacity:.5}}>
               <div style={{fontSize:40,marginBottom:10}}>📋</div>
-              <div style={{fontFamily:"'Inter',sans-serif",fontSize:16}}>Nenhuma sessão encontrada</div>
+              <div style={{fontFamily:"'Inter',sans-serif",fontSize:16}}>Nenhuma sessao encontrada</div>
             </div>
           )}
         </div>
       )}
 
-      {/* ── FORMULÁRIO NOVO ── */}
+      {/* ── FORMULARIO NOVO ── */}
       {viewMode==="novo" && (
         <div>
           {/* Stepper */}
@@ -2496,10 +2523,10 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
             ))}
           </div>
 
-          {/* STEP 0 — Identificação */}
+          {/* STEP 0 - Identificacao */}
           {step===0&&(
             <div className="card">
-              <div className="ct"><span className="ctd"/>Identificação do Operador e Sessão</div>
+              <div className="ct"><span className="ctd"/>Identificacao do Operador e Sessao</div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}} className="form-grid-2">
                 <div style={{position:"relative"}}>
                   <label style={{fontSize:12,color:C.muted,display:"block",marginBottom:6}}>RE do Operador *</label>
@@ -2507,7 +2534,7 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
                     style={{background:C.bg,border:`1px solid ${form.re?C.accent:C.border}`,color:C.text,padding:"10px 14px",
                       borderRadius:9,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none"}}
                     placeholder="Digite o RE ou nome para buscar..."
-                    value={opSearch || (form.re ? `${form.re} – ${form.nome}` : "")}
+                    value={opSearch || (form.re ? `${form.re} - ${form.nome}` : "")}
                     onChange={e=>{ setOpSearch(e.target.value); setOpDropOpen(true); upd("re",""); upd("nome",""); }}
                     onFocus={()=>setOpDropOpen(true)}
                   />
@@ -2546,12 +2573,12 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
                   {form.re && (
                     <div style={{marginTop:6,padding:"6px 10px",background:`${C.accent}15`,border:`1px solid ${C.accent}30`,
                       borderRadius:7,fontSize:12,color:C.accent,display:"flex",alignItems:"center",gap:6}}>
-                      ✓ <strong>{form.re}</strong> — {form.nome}
+                      ✓ <strong>{form.re}</strong> - {form.nome}
                     </div>
                   )}
                 </div>
                 <div>
-                  <label style={{fontSize:12,color:C.muted,display:"block",marginBottom:6}}>Data da Sessão *</label>
+                  <label style={{fontSize:12,color:C.muted,display:"block",marginBottom:6}}>Data da Sessao *</label>
                   <input style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"10px 14px",borderRadius:9,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none"}}
                     value={form.data} onChange={e=>upd("data",e.target.value)} placeholder="dd/mm/aa"/>
                 </div>
@@ -2559,7 +2586,7 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
                   <label style={{fontSize:12,color:C.muted,display:"block",marginBottom:6}}>Tipo de Acompanhante</label>
                   <select style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"10px 14px",borderRadius:9,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none"}}
                     value={form.tipoAcomp} onChange={e=>upd("tipoAcomp",e.target.value)}>
-                    {["Sozinho","Cônjuge","Familiar","Responsável legal","Outro"].map(t=><option key={t}>{t}</option>)}
+                    {["Sozinho","Conjuge","Familiar","Responsavel legal","Outro"].map(t=><option key={t}>{t}</option>)}
                   </select>
                 </div>
                 <div>
@@ -2584,7 +2611,7 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
             </div>
           )}
 
-          {/* STEP 1 — Relato & Causas */}
+          {/* STEP 1 - Relato & Causas */}
           {step===1&&(
             <div>
               <div className="card" style={{marginBottom:16}}>
@@ -2599,7 +2626,7 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
                     </button>);
                   })}
                 </div>
-                {/* Campo texto quando "Outros" está selecionado */}
+                {/* Campo texto quando "Outros" esta selecionado */}
                 {form.causas.includes("Outros") && (
                   <div style={{marginTop:12}}>
                     <label style={{fontSize:12,color:C.muted,display:"block",marginBottom:4}}>Descreva a causa (Outros) *</label>
@@ -2615,7 +2642,7 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
               </div>
 
               <div className="card" style={{marginBottom:16}}>
-                <div className="ct"><span className="ctd"/>Nível de Comprometimento do Operador</div>
+                <div className="ct"><span className="ctd"/>Nivel de Comprometimento do Operador</div>
                 <div style={{display:"flex",gap:8,alignItems:"center"}}>
                   {[1,2,3,4,5].map(i=>(
                     <button key={i} onClick={()=>upd("comprometimento",i)}
@@ -2625,61 +2652,61 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
                     </button>
                   ))}
                   <span style={{fontSize:13,color:C.muted,marginLeft:8}}>
-                    {["","Muito baixo","Baixo","Médio","Alto","Muito alto"][form.comprometimento]||"Selecione"}
+                    {["","Muito baixo","Baixo","Medio","Alto","Muito alto"][form.comprometimento]||"Selecione"}
                   </span>
                 </div>
               </div>
 
               <div className="card">
-                <div className="ct"><span className="ctd"/>Relato da Sessão *</div>
+                <div className="ct"><span className="ctd"/>Relato da Sessao *</div>
                 <textarea style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"12px 14px",
                   borderRadius:10,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none",
                   resize:"vertical",minHeight:140,lineHeight:1.7}}
-                  placeholder="Descreva o que foi relatado pelo operador e/ou acompanhante durante a sessão, comportamento observado, informações relevantes..."
+                  placeholder="Descreva o que foi relatado pelo operador e/ou acompanhante durante a sessao, comportamento observado, informacoes relevantes..."
                   value={form.relato} onChange={e=>upd("relato",e.target.value)}/>
                 <div style={{marginTop:12,display:"flex",alignItems:"center",gap:12}}>
                   <input type="checkbox" id="den" checked={form.denuncia} onChange={e=>upd("denuncia",e.target.checked)}
                     style={{width:16,height:16,cursor:"pointer",accentColor:C.red}}/>
                   <label htmlFor="den" style={{fontSize:13,cursor:"pointer",color:form.denuncia?C.red:C.muted}}>
-                    ⚠️ Registrar denúncia nesta sessão
+                    ⚠️ Registrar denuncia nesta sessao
                   </label>
                 </div>
                 {form.denuncia&&(
                   <div style={{marginTop:10,padding:"10px 14px",background:`${C.red}10`,border:`1px solid ${C.red}30`,borderRadius:8,fontSize:12,color:C.red}}>
-                    Uma denúncia será associada a esta sessão. O caso será encaminhado ao setor competente automaticamente.
+                    Uma denuncia sera associada a esta sessao. O caso sera encaminhado ao setor competente automaticamente.
                   </div>
                 )}
               </div>
             </div>
           )}
 
-          {/* STEP 2 — Encaminhamento */}
+          {/* STEP 2 - Encaminhamento */}
           {step===2&&(
             <div className="card">
               <div className="ct"><span className="ctd"/>Encaminhamento para Setor *</div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
                 <div>
-                  <label style={{fontSize:12,color:C.muted,display:"block",marginBottom:6}}>Setor responsável *</label>
+                  <label style={{fontSize:12,color:C.muted,display:"block",marginBottom:6}}>Setor responsavel *</label>
                   <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
                     {Object.keys(SETORES_MAP).map(s=>{
                       const on=form.setor===s;
-                      const icons={RH:"👔",Psicologia:"🧠",DP:"📁",Ambulatório:"🏥",Jurídico:"⚖️"};
+                      const icons={RH:"👔",Psicologia:"🧠",DP:"📁",Ambulatorio:"🏥",Juridico:"⚖️"};
                       return(<button key={s} onClick={()=>upd("setor",s)} style={{padding:"10px 16px",borderRadius:10,
                         border:`1px solid ${on?C.accent:C.border}`,background:on?`${C.accent}18`:"transparent",
                         color:on?C.accent:C.muted,fontSize:13,fontWeight:600,cursor:"pointer",transition:"all .2s",display:"flex",alignItems:"center",gap:6}}>
                         {icons[s]} {s}
                       </button>);
                     })}
-                    <button onClick={()=>upd("setor","–")} style={{padding:"10px 16px",borderRadius:10,
-                      border:`1px solid ${form.setor==="–"?C.muted:C.border}`,background:"transparent",
+                    <button onClick={()=>upd("setor","-")} style={{padding:"10px 16px",borderRadius:10,
+                      border:`1px solid ${form.setor==="-"?C.muted:C.border}`,background:"transparent",
                       color:C.muted,fontSize:13,cursor:"pointer"}}>
                       Sem encaminhamento
                     </button>
                   </div>
                 </div>
-                {form.setor&&form.setor!=="–"&&subsetores.length>0&&(
+                {form.setor&&form.setor!=="-"&&subsetores.length>0&&(
                   <div>
-                    <label style={{fontSize:12,color:C.muted,display:"block",marginBottom:6}}>Subnível / Especialidade</label>
+                    <label style={{fontSize:12,color:C.muted,display:"block",marginBottom:6}}>Subnivel / Especialidade</label>
                     <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
                       {subsetores.map(s=>{
                         const on=form.subsetor===s;
@@ -2693,34 +2720,34 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
                   </div>
                 )}
               </div>
-              {form.setor&&form.setor!=="–"&&(
+              {form.setor&&form.setor!=="-"&&(
                 <div style={{padding:"12px 16px",background:`${C.green}08`,border:`1px solid ${C.green}25`,borderRadius:10,fontSize:13,color:C.muted}}>
-                  ✓ Será criada uma tratativa para <strong style={{color:C.accent}}>{form.setor}</strong>{form.subsetor&&` → ${form.subsetor}`} vinculada a esta sessão.
+                  ✓ Sera criada uma tratativa para <strong style={{color:C.accent}}>{form.setor}</strong>{form.subsetor&&` → ${form.subsetor}`} vinculada a esta sessao.
                 </div>
               )}
             </div>
           )}
 
-          {/* STEP 3 — Confirmação */}
+          {/* STEP 3 - Confirmacao */}
           {step===3&&(
             <div>
               {saved?(
                 <div style={{textAlign:"center",padding:"60px 0"}}>
                   <div style={{fontSize:64,marginBottom:16}}>✅</div>
-                  <div style={{fontFamily:"'Inter',sans-serif",fontSize:22,fontWeight:800,color:C.green,marginBottom:8}}>Sessão registrada!</div>
+                  <div style={{fontFamily:"'Inter',sans-serif",fontSize:22,fontWeight:800,color:C.green,marginBottom:8}}>Sessao registrada!</div>
                   <div style={{color:C.muted,fontSize:14}}>Redirecionando para a lista...</div>
                 </div>
               ):(
                 <div className="card">
-                  <div className="ct"><span className="ctd"/>Confirmar Registro da Sessão</div>
+                  <div className="ct"><span className="ctd"/>Confirmar Registro da Sessao</div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}} className="form-grid-2">
                     {[
-                      {l:"Operador",        v:`${form.re} – ${form.nome}`},
+                      {l:"Operador",        v:`${form.re} - ${form.nome}`},
                       {l:"Data",            v:form.data},
                       {l:"Acompanhante",    v:form.tipoAcomp==="Sozinho"?"Sozinho":`${form.tipoAcomp}: ${form.acompanhante}`},
                       {l:"Comprometimento", v:`${"★".repeat(form.comprometimento)}${"☆".repeat(5-form.comprometimento)} (${form.comprometimento}/5)`},
-                      {l:"Causas",          v:form.causas.join(", ")||"–"},
-                      {l:"Encaminhamento",  v:form.setor&&form.setor!=="–"?`${form.setor}${form.subsetor?" → "+form.subsetor:""}`:  "Sem encaminhamento"},
+                      {l:"Causas",          v:form.causas.join(", ")||"-"},
+                      {l:"Encaminhamento",  v:form.setor&&form.setor!=="-"?`${form.setor}${form.subsetor?" → "+form.subsetor:""}`:  "Sem encaminhamento"},
                     ].map(x=>(
                       <div key={x.l} style={{background:C.bg,borderRadius:10,padding:"12px 14px"}}>
                         <div style={{fontSize:11,color:C.muted,marginBottom:3}}>{x.l}</div>
@@ -2732,10 +2759,10 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
                     <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Relato</div>
                     <div style={{fontSize:13,lineHeight:1.7,color:C.text}}>{form.relato}</div>
                   </div>
-                  {form.denuncia&&<div style={{padding:"10px 14px",background:`${C.red}10`,border:`1px solid ${C.red}30`,borderRadius:8,fontSize:12,color:C.red,marginBottom:16}}>⚠️ Esta sessão possui uma <strong>denúncia registrada</strong>.</div>}
+                  {form.denuncia&&<div style={{padding:"10px 14px",background:`${C.red}10`,border:`1px solid ${C.red}30`,borderRadius:8,fontSize:12,color:C.red,marginBottom:16}}>⚠️ Esta sessao possui uma <strong>denuncia registrada</strong>.</div>}
                   <button onClick={handleSubmit} style={{width:"100%",padding:"14px",background:`linear-gradient(135deg,${C.accent},${C.accent2})`,
                     color:"#000",border:"none",borderRadius:10,fontFamily:"'Inter',sans-serif",fontSize:15,fontWeight:800,cursor:"pointer",letterSpacing:.5}}>
-                    ✓ CONFIRMAR E SALVAR SESSÃO
+                    ✓ CONFIRMAR E SALVAR SESSAO
                   </button>
                 </div>
               )}
@@ -2750,7 +2777,7 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
                 ? <button onClick={()=>canNext&&setStep(s=>s+1)} style={{padding:"10px 28px",borderRadius:10,
                     background:canNext?`linear-gradient(135deg,${C.accent},${C.accent2})`:`${C.border}`,
                     color:canNext?"#000":C.muted,border:"none",fontFamily:"'Inter',sans-serif",fontSize:13,fontWeight:700,cursor:canNext?"pointer":"not-allowed",transition:"all .2s"}}>
-                    Próximo →
+                    Proximo →
                   </button>
                 : null
               }
@@ -2765,27 +2792,27 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
 // ─── COMING SOON ──────────────────────────────────────────────────────────────
 // ─── TRATATIVAS INIT DATA ─────────────────────────────────────────────────────
 const TRATATIVAS_INIT = [
-  { id:1,  re:"RE5319", nome:"Carlos A. Mendes",    area:"Psicologia", subarea:"Psicólogo",            data:"10/01/25", prazo:"10/02/25", status:"concluido",  prioridade:"alta",   descricao:"Terapia de casal — 8 sessões agendadas.", retorno:"Casal completou as sessões. Alta em 15/Mar/25." },
-  { id:2,  re:"RE4201", nome:"Marcos P. Lima",      area:"RH",         subarea:"Orientação",           data:"22/01/25", prazo:"22/02/25", status:"concluido",  prioridade:"media",  descricao:"Orientação sobre renegociação de dívidas consignadas.", retorno:"Orientação realizada. Operador não seguiu as recomendações." },
-  { id:3,  re:"RE3887", nome:"João S. Oliveira",    area:"Ambulatório",subarea:"Médico",               data:"05/02/25", prazo:"05/03/25", status:"concluido",  prioridade:"alta",   descricao:"Avaliação e tratamento de ansiedade.", retorno:"Operador iniciou tratamento. Evolução positiva." },
-  { id:4,  re:"RE4201", nome:"Marcos P. Lima",      area:"Jurídico",   subarea:"Análise",              data:"22/02/25", prazo:"22/03/25", status:"andamento",  prioridade:"alta",   descricao:"Análise de comportamento disciplinar reincidente.", retorno:"" },
-  { id:5,  re:"RE6014", nome:"Rafael T. Santos",    area:"DP",         subarea:"Orientação disciplinar",data:"21/03/25",prazo:"04/04/25", status:"pendente",   prioridade:"urgente",descricao:"Registro de acidente com responsabilidade — providências disciplinares.", retorno:"" },
-  { id:6,  re:"RE7801", nome:"Felipe A. Nascimento",area:"Jurídico",   subarea:"Mediação",             data:"22/03/25", prazo:"05/04/25", status:"pendente",   prioridade:"media",  descricao:"Análise de reclamação formal de munícipe.", retorno:"" },
-  { id:7,  re:"RE5507", nome:"Paulo B. Rodrigues",  area:"RH",         subarea:"Benefícios",           data:"18/02/25", prazo:"18/03/25", status:"concluido",  prioridade:"baixa",  descricao:"Revisão de benefícios — solicitação de vale transporte extra.", retorno:"Benefício concedido e atualizado no sistema." },
+  { id:1,  re:"RE5319", nome:"Carlos A. Mendes",    area:"Psicologia", subarea:"Psicologo",            data:"10/01/25", prazo:"10/02/25", status:"concluido",  prioridade:"alta",   descricao:"Terapia de casal - 8 sessoes agendadas.", retorno:"Casal completou as sessoes. Alta em 15/Mar/25." },
+  { id:2,  re:"RE4201", nome:"Marcos P. Lima",      area:"RH",         subarea:"Orientacao",           data:"22/01/25", prazo:"22/02/25", status:"concluido",  prioridade:"media",  descricao:"Orientacao sobre renegociacao de dividas consignadas.", retorno:"Orientacao realizada. Operador nao seguiu as recomendacoes." },
+  { id:3,  re:"RE3887", nome:"Joao S. Oliveira",    area:"Ambulatorio",subarea:"Medico",               data:"05/02/25", prazo:"05/03/25", status:"concluido",  prioridade:"alta",   descricao:"Avaliacao e tratamento de ansiedade.", retorno:"Operador iniciou tratamento. Evolucao positiva." },
+  { id:4,  re:"RE4201", nome:"Marcos P. Lima",      area:"Juridico",   subarea:"Analise",              data:"22/02/25", prazo:"22/03/25", status:"andamento",  prioridade:"alta",   descricao:"Analise de comportamento disciplinar reincidente.", retorno:"" },
+  { id:5,  re:"RE6014", nome:"Rafael T. Santos",    area:"DP",         subarea:"Orientacao disciplinar",data:"21/03/25",prazo:"04/04/25", status:"pendente",   prioridade:"urgente",descricao:"Registro de acidente com responsabilidade - providencias disciplinares.", retorno:"" },
+  { id:6,  re:"RE7801", nome:"Felipe A. Nascimento",area:"Juridico",   subarea:"Mediacao",             data:"22/03/25", prazo:"05/04/25", status:"pendente",   prioridade:"media",  descricao:"Analise de reclamacao formal de municipe.", retorno:"" },
+  { id:7,  re:"RE5507", nome:"Paulo B. Rodrigues",  area:"RH",         subarea:"Beneficios",           data:"18/02/25", prazo:"18/03/25", status:"concluido",  prioridade:"baixa",  descricao:"Revisao de beneficios - solicitacao de vale transporte extra.", retorno:"Beneficio concedido e atualizado no sistema." },
 ];
 
-const AREA_ICONS = { RH:"👔", Psicologia:"🧠", DP:"📁", Ambulatório:"🏥", Jurídico:"⚖️" };
-const AREA_COLORS= { RH:C.accent2, Psicologia:C.purple, DP:C.gold, Ambulatório:C.green, Jurídico:C.orange };
+const AREA_ICONS = { RH:"👔", Psicologia:"🧠", DP:"📁", Ambulatorio:"🏥", Juridico:"⚖️" };
+const AREA_COLORS= { RH:C.accent2, Psicologia:C.purple, DP:C.gold, Ambulatorio:C.green, Juridico:C.orange };
 const PRIOR_MAP  = {
   urgente: { label:"Urgente", color:C.red,    bg:`${C.red}18`    },
   alta:    { label:"Alta",    color:C.orange, bg:`${C.orange}18` },
-  media:   { label:"Média",   color:C.gold,   bg:`${C.gold}18`   },
+  media:   { label:"Media",   color:C.gold,   bg:`${C.gold}18`   },
   baixa:   { label:"Baixa",   color:C.muted,  bg:`${C.border}50` },
 };
 const TRAT_ST_MAP = {
   pendente:  { label:"Pendente",      color:C.red,   bg:`${C.red}18`   },
   andamento: { label:"Em andamento",  color:C.gold,  bg:`${C.gold}18`  },
-  concluido: { label:"Concluído",     color:C.green, bg:`${C.green}18` },
+  concluido: { label:"Concluido",     color:C.green, bg:`${C.green}18` },
 };
 
 // ─── TRATATIVAS PAGE ──────────────────────────────────────────────────────────
@@ -2823,7 +2850,7 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions }) =>
 
   const handleRetornoSave = () => {
     onUpdate(tratativas.map(t => t.id===detalhes.id ? {...t, retorno:retornoText, status:"concluido"} : t));
-    toast(`Tratativa de ${detalhes.area} concluída!`, "success");
+    toast(`Tratativa de ${detalhes.area} concluida!`, "success");
     setDetalhes(null);
     setRetornoText("");
   };
@@ -2841,9 +2868,9 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions }) =>
     try {
       const xlsxLib = await loadXLSX();
       const rows = tratativas.map(t=>({
-        "RE": t.re, "Nome": t.nome, "Área": t.area, "Subárea": t.subarea||"–",
-        "Data": t.data, "Prazo": t.prazo||"–", "Prioridade": t.prioridade,
-        "Status": t.status, "Descrição": t.descricao, "Retorno do Setor": t.retorno||"–",
+        "RE": t.re, "Nome": t.nome, "Area": t.area, "Subarea": t.subarea||"-",
+        "Data": t.data, "Prazo": t.prazo||"-", "Prioridade": t.prioridade,
+        "Status": t.status, "Descricao": t.descricao, "Retorno do Setor": t.retorno||"-",
       }));
       const ws = xlsxLib.utils.json_to_sheet(rows);
       ws["!cols"] = [{wch:10},{wch:26},{wch:14},{wch:22},{wch:12},{wch:12},{wch:10},{wch:12},{wch:50},{wch:50}];
@@ -2905,7 +2932,7 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions }) =>
             </div>
 
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
-              {[{l:"Data",v:detalhes.data},{l:"Prazo",v:detalhes.prazo||"–"},{l:"Prioridade",v:PRIOR_MAP[detalhes.prioridade]?.label},{l:"Status",v:TRAT_ST_MAP[modalStatus]?.label}]
+              {[{l:"Data",v:detalhes.data},{l:"Prazo",v:detalhes.prazo||"-"},{l:"Prioridade",v:PRIOR_MAP[detalhes.prioridade]?.label},{l:"Status",v:TRAT_ST_MAP[modalStatus]?.label}]
                 .map(x=><div key={x.l} style={{background:C.bg,borderRadius:9,padding:"10px 12px"}}>
                   <div style={{fontSize:10,color:C.muted,marginBottom:2}}>{x.l}</div>
                   <div style={{fontSize:13,fontWeight:600}}>{x.v}</div>
@@ -2913,18 +2940,18 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions }) =>
             </div>
 
             <div style={{background:C.bg,borderRadius:10,padding:"12px 14px",marginBottom:16}}>
-              <div style={{fontSize:10,color:C.muted,marginBottom:4,textTransform:"uppercase",letterSpacing:.5}}>Descrição</div>
+              <div style={{fontSize:10,color:C.muted,marginBottom:4,textTransform:"uppercase",letterSpacing:.5}}>Descricao</div>
               <div style={{fontSize:13,lineHeight:1.7}}>{detalhes.descricao}</div>
             </div>
 
-            {/* Formulário da mentoria relacionada */}
+            {/* Formulario da mentoria relacionada */}
             {(()=>{
               const sess = sessions?.filter(s=>s.re===detalhes.re);
               if(!sess||!sess.length) return null;
               return(
                 <div style={{marginBottom:16,background:C.bg,borderRadius:10,padding:"14px 16px",border:`1px solid ${C.accent}25`}}>
                   <div style={{fontSize:11,color:C.accent,fontWeight:700,marginBottom:10,textTransform:"uppercase",letterSpacing:.5}}>
-                    💬 Formulário de Mentoria ({sess.length} sessão{sess.length>1?"ões":""})
+                    💬 Formulario de Mentoria ({sess.length} sessao{sess.length>1?"oes":""})
                   </div>
                   {sess.slice(0,2).map((s,i)=>(
                     <div key={i} style={{marginBottom:8,paddingBottom:8,borderBottom:i<sess.length-1?`1px solid ${C.border}`:"none"}}>
@@ -2938,7 +2965,7 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions }) =>
                       </div>
                       <div style={{fontSize:12,marginBottom:4}}>
                         <strong style={{color:C.muted}}>Causas: </strong>
-                        {(s.causas||[]).join(", ")||"–"}
+                        {(s.causas||[]).join(", ")||"-"}
                         {s.outrosDetalhe&&<span style={{color:C.muted}}> ({s.outrosDetalhe})</span>}
                       </div>
                       <div style={{fontSize:12,color:C.muted,lineHeight:1.5}}>{s.relato}</div>
@@ -2948,7 +2975,7 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions }) =>
               );
             })()}
 
-            {/* Ficha rápida do operador */}
+            {/* Ficha rapida do operador */}
             {(()=>{
               const op = operators?.find(o=>o.re===detalhes.re);
               if(!op) return null;
@@ -2960,15 +2987,15 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions }) =>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
                     {[
                       {l:"Nome",       v:op.nome},
-                      {l:"Função",     v:op.funcao},
+                      {l:"Funcao",     v:op.funcao},
                       {l:"Garagem",    v:op.garagem},
-                      {l:"Admissão",   v:op.admissao},
+                      {l:"Admissao",   v:op.admissao},
                       {l:"Faltas",     v:op.faltas, c:op.faltas>=10?C.red:op.faltas>=5?C.orange:C.green},
                       {l:"Multas",     v:op.multas, c:op.multas>=5?C.red:op.multas>=3?C.orange:C.green},
                     ].map(x=>(
                       <div key={x.l} style={{background:C.surface,borderRadius:7,padding:"8px 10px"}}>
                         <div style={{fontSize:10,color:C.muted,marginBottom:2}}>{x.l}</div>
-                        <div style={{fontSize:13,fontWeight:600,color:x.c||C.text}}>{x.v||"–"}</div>
+                        <div style={{fontSize:13,fontWeight:600,color:x.c||C.text}}>{x.v||"-"}</div>
                       </div>
                     ))}
                   </div>
@@ -2984,7 +3011,7 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions }) =>
               <textarea style={{background:C.bg,border:`1px solid ${detalhes.retorno?C.green:C.border}`,color:C.text,
                 padding:"10px 12px",borderRadius:9,fontSize:13,fontFamily:"'Inter',sans-serif",
                 width:"100%",outline:"none",resize:"vertical",minHeight:90,lineHeight:1.7}}
-                placeholder="Descreva o que foi realizado pelo setor, resultado, observações..."
+                placeholder="Descreva o que foi realizado pelo setor, resultado, observacoes..."
                 value={retornoText} onChange={e=>setRetornoText(e.target.value)}/>
             </div>
 
@@ -2996,7 +3023,7 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions }) =>
                   style={{flex:1,padding:"9px",borderRadius:9,border:`1px solid ${modalStatus===s?st.color:C.border}`,
                   background:modalStatus===s?st.bg:"transparent",color:modalStatus===s?st.color:C.muted,
                   fontSize:12,fontWeight:600,cursor:"pointer",transition:"all .2s"}}>
-                  {s==="pendente"?"⏳ Pendente":s==="andamento"?"🔄 Em andamento":"✓ Concluído"}
+                  {s==="pendente"?"⏳ Pendente":s==="andamento"?"🔄 Em andamento":"✓ Concluido"}
                 </button>);
               })}
             </div>
@@ -3025,18 +3052,18 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions }) =>
                 <select style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none"}}
                   value={newForm.re} onChange={e=>{const op=operators.find(o=>o.re===e.target.value);setNewForm(f=>({...f,re:e.target.value,nome:op?.nome||""}));}}>
                   <option value="">Selecione...</option>
-                  {operators.map(o=><option key={o.re} value={o.re}>{o.re} – {o.nome}</option>)}
+                  {operators.map(o=><option key={o.re} value={o.re}>{o.re} - {o.nome}</option>)}
                 </select>
               </div>
               <div>
-                <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Área *</div>
+                <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Area *</div>
                 <select style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none"}}
                   value={newForm.area} onChange={e=>setNewForm(f=>({...f,area:e.target.value,subarea:""}))}>
                   {Object.keys(AREA_ICONS).map(a=><option key={a}>{a}</option>)}
                 </select>
               </div>
               <div>
-                <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Subnível</div>
+                <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Subnivel</div>
                 <select style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none"}}
                   value={newForm.subarea} onChange={e=>setNewForm(f=>({...f,subarea:e.target.value}))}>
                   <option value="">Selecione...</option>
@@ -3063,9 +3090,9 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions }) =>
               </div>
             </div>
             <div style={{marginBottom:16}}>
-              <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Descrição *</div>
+              <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Descricao *</div>
               <textarea style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"10px 12px",borderRadius:8,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none",resize:"vertical",minHeight:80}}
-                value={newForm.descricao} onChange={e=>setNewForm(f=>({...f,descricao:e.target.value}))} placeholder="Descreva a ação a ser tomada..."/>
+                value={newForm.descricao} onChange={e=>setNewForm(f=>({...f,descricao:e.target.value}))} placeholder="Descreva a acao a ser tomada..."/>
             </div>
             <div style={{display:"flex",gap:8}}>
               <button onClick={handleAdd} disabled={!newForm.re||!newForm.descricao}
@@ -3081,7 +3108,7 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions }) =>
 
       {/* ── Header ── */}
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20,flexWrap:"wrap"}}>
-        <div style={{fontFamily:"'Inter',sans-serif",fontSize:18,fontWeight:700}}>Gestão de Tratativas</div>
+        <div style={{fontFamily:"'Inter',sans-serif",fontSize:18,fontWeight:700}}>Gestao de Tratativas</div>
         <div style={{flex:1}}/>
         <button className="abt" style={{padding:"8px 14px",background:`${C.gold}15`,borderColor:C.gold,color:C.gold}} onClick={exportExcel}>⬇ Excel</button>
         <button className="abt" style={{padding:"8px 18px",background:`${C.green}18`,borderColor:C.green,color:C.green}} onClick={()=>setShowModal(true)}>+ Nova Tratativa</button>
@@ -3103,7 +3130,7 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions }) =>
           {v:urgentes,  l:"Urgentes",         c:C.red},
           {v:pendentes, l:"Pendentes",         c:C.orange},
           {v:andamento, l:"Em andamento",      c:C.gold},
-          {v:concluido, l:"Concluídas",         c:C.green},
+          {v:concluido, l:"Concluidas",         c:C.green},
         ].map(x=>(
           <div key={x.l} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 16px",
             borderTop:`2px solid ${x.c}40`,cursor:"pointer"}} onClick={()=>setFiltStatus(x.l==="Total"?"todos":x.l==="Urgentes"?"urgente":x.l==="Pendentes"?"pendente":x.l==="Em andamento"?"andamento":"concluido")}>
@@ -3113,10 +3140,10 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions }) =>
         ))}
       </div>
 
-      {/* ── Dashboard gráfico por área ── */}
+      {/* ── Dashboard grafico por area ── */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:20}}>
         <div className="card">
-          <div className="ct"><span className="ctd"/>Tratativas por Área</div>
+          <div className="ct"><span className="ctd"/>Tratativas por Area</div>
           <ResponsiveContainer width="100%" height={200}>
             <PieChart>
               <Pie data={Object.entries(
@@ -3133,7 +3160,7 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions }) =>
           </ResponsiveContainer>
         </div>
         <div className="card">
-          <div className="ct"><span className="ctd"/>Status por Área</div>
+          <div className="ct"><span className="ctd"/>Status por Area</div>
           <div style={{display:"flex",flexDirection:"column",gap:10,padding:"8px 0"}}>
             {Object.entries(
               tratativas.reduce((acc,t)=>{
@@ -3173,11 +3200,11 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions }) =>
           placeholder="🔍 Buscar RE ou nome..." value={filtRe} onChange={e=>setFiltRe(e.target.value)}/>
         <select style={{background:C.card,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:10,fontSize:13,fontFamily:"'Inter',sans-serif",outline:"none"}}
           value={filtArea} onChange={e=>setFiltArea(e.target.value)}>
-          {areas.map(a=><option key={a} value={a}>{a==="todas"?"Todas as áreas":a}</option>)}
+          {areas.map(a=><option key={a} value={a}>{a==="todas"?"Todas as areas":a}</option>)}
         </select>
         <select style={{background:C.card,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:10,fontSize:13,fontFamily:"'Inter',sans-serif",outline:"none"}}
           value={filtStatus} onChange={e=>setFiltStatus(e.target.value)}>
-          {[{v:"todos",l:"Todos status"},{v:"pendente",l:"Pendente"},{v:"andamento",l:"Em andamento"},{v:"concluido",l:"Concluído"}].map(s=><option key={s.v} value={s.v}>{s.l}</option>)}
+          {[{v:"todos",l:"Todos status"},{v:"pendente",l:"Pendente"},{v:"andamento",l:"Em andamento"},{v:"concluido",l:"Concluido"}].map(s=><option key={s.v} value={s.v}>{s.l}</option>)}
         </select>
         <span style={{fontSize:12,color:C.muted}}>{filtered.length} tratativa{filtered.length!==1?"s":""}</span>
       </div>
@@ -3188,7 +3215,7 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions }) =>
           {[
             {status:"pendente",  label:"⏳ Pendente",      color:C.red},
             {status:"andamento", label:"🔄 Em andamento",  color:C.gold},
-            {status:"concluido", label:"✓ Concluído",      color:C.green},
+            {status:"concluido", label:"✓ Concluido",      color:C.green},
           ].map(col=>{
             const items = filtered.filter(t=>t.status===col.status);
             return(
@@ -3217,7 +3244,7 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions }) =>
             <table>
               <thead>
                 <tr>
-                  <th>RE</th><th>Operador</th><th>Área</th><th>Descrição</th>
+                  <th>RE</th><th>Operador</th><th>Area</th><th>Descricao</th>
                   <th>Prazo</th><th>Prioridade</th><th>Status</th><th>Retorno</th><th></th>
                 </tr>
               </thead>
@@ -3236,11 +3263,11 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions }) =>
                         </span>
                       </td>
                       <td style={{fontSize:12,color:C.muted,maxWidth:200}}>{t.descricao.length>50?t.descricao.slice(0,50)+"…":t.descricao}</td>
-                      <td style={{fontSize:12,color:C.muted,whiteSpace:"nowrap"}}>{t.prazo||"–"}</td>
+                      <td style={{fontSize:12,color:C.muted,whiteSpace:"nowrap"}}>{t.prazo||"-"}</td>
                       <td><span className="pill" style={{color:pr.color,background:pr.bg,fontSize:10}}>▲ {pr.label}</span></td>
                       <td><span className="pill" style={{color:st.color,background:st.bg,fontSize:10}}>● {st.label}</span></td>
                       <td style={{fontSize:11,color:t.retorno?C.green:C.muted,maxWidth:140}}>
-                        {t.retorno?t.retorno.slice(0,40)+"…":"–"}
+                        {t.retorno?t.retorno.slice(0,40)+"…":"-"}
                       </td>
                       <td><button className="abt" onClick={e=>{e.stopPropagation();setDetalhes(t);setRetornoText(t.retorno||"");setModalStatus(t.status);}}>Ver</button></td>
                     </tr>
@@ -3256,7 +3283,7 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions }) =>
   );
 };
 
-// ─── RELATÓRIOS PAGE ──────────────────────────────────────────────────────────
+// ─── RELATORIOS PAGE ──────────────────────────────────────────────────────────
 const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
   const [tab, setTab] = useState("visao");
   const ops = data.operators || [];
@@ -3291,7 +3318,7 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
   const causasRank=Object.entries(causasMap).sort((a,b)=>b[1]-a[1]).map(([name,value])=>({name,value}));
   const totalCausas=causasRank.reduce((a,c)=>a+c.value,0);
 
-  // ── Tratativas por área ──────────────────────────────────────────────────
+  // ── Tratativas por area ──────────────────────────────────────────────────
   const tratByArea={};
   tratativas.forEach(t=>{
     if(!tratByArea[t.area])tratByArea[t.area]={area:t.area,total:0,concluido:0,pendente:0,andamento:0};
@@ -3300,11 +3327,11 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
   });
   const tratAreaList=Object.values(tratByArea).sort((a,b)=>b.total-a.total);
 
-  // ── Comprometimento médio ────────────────────────────────────────────────
+  // ── Comprometimento medio ────────────────────────────────────────────────
   const sessionsComComp=sessions.filter(s=>s.comprometimento>0);
   const compMedio=sessionsComComp.length?Math.round(sessionsComComp.reduce((a,s)=>a+s.comprometimento,0)/sessionsComComp.length*10)/10:0;
 
-  // ── Evolução mensal (sessions por mês) ───────────────────────────────────
+  // ── Evolucao mensal (sessions por mes) ───────────────────────────────────
   const sessoesPorMes={};
   sessions.forEach(s=>{
     const parts=s.data.split("/"); if(parts.length<3)return;
@@ -3335,9 +3362,9 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
       const xlsxLib = await loadXLSX();
       const wb = xlsxLib.utils.book_new();
 
-      // Aba 1 — Visão Geral
+      // Aba 1 - Visao Geral
       const geral = [
-        ["ELEVAMENTE — RELATÓRIO GERENCIAL",""],
+        ["ELEVAMENTE - RELATORIO GERENCIAL",""],
         ["Gerado em", new Date().toLocaleString("pt-BR")],
         ["",""],
         ["INDICADOR","VALOR"],
@@ -3346,49 +3373,49 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
         ["Aguardando mentoria", aguardando],
         ["Melhoraram", melhoraram],
         ["Pioraram", pioraram],
-        ["Em avaliação", avaliacao],
+        ["Em avaliacao", avaliacao],
         ["Taxa de melhora (%)", taxaMelhora+"%"],
         ["Perda financeira total estimada (R$)", perdaTotal.toLocaleString("pt-BR",{style:"currency",currency:"BRL"})],
-        ["Comprometimento médio (1-5)", compMedio],
-        ["Total de sessões de mentoria", sessions.length],
+        ["Comprometimento medio (1-5)", compMedio],
+        ["Total de sessoes de mentoria", sessions.length],
         ["Total de tratativas", tratativas.length],
-        ["Tratativas concluídas", tratativas.filter(t=>t.status==="concluido").length],
+        ["Tratativas concluidas", tratativas.filter(t=>t.status==="concluido").length],
         ["Tratativas pendentes", tratativas.filter(t=>t.status==="pendente").length],
       ];
       const wsGeral = xlsxLib.utils.aoa_to_sheet(geral);
       wsGeral["!cols"]=[{wch:40},{wch:24}];
-      xlsxLib.utils.book_append_sheet(wb, wsGeral, "Visão Geral");
+      xlsxLib.utils.book_append_sheet(wb, wsGeral, "Visao Geral");
 
-      // Aba 2 — Ranking Operadores
-      const rankRows = [["#","RE","Nome","Garagem","Função","Faltas","Multas","Suspensões","Acidentes","Score Risco","Status","Resultado","Perda Estimada (R$)"]];
+      // Aba 2 - Ranking Operadores
+      const rankRows = [["#","RE","Nome","Garagem","Funcao","Faltas","Multas","Suspensoes","Acidentes","Score Risco","Status","Resultado","Perda Estimada (R$)"]];
       ranking.forEach((op,i)=>{
         const faltas=op.faltas||0,atestados=op.atestados||0,dsr=Math.round(faltas*0.70);
         const ferP=faltas<=5?0:faltas<=14?6:faltas<=23?12:faltas<=32?18:30;
         const vd=custos.valorDiario,vr=custos.valorVR;
         const perda=faltas*vd+dsr*vd+ferP*vd+ferP*(vd/3)+atestados*vr+(op.multasValor||0);
-        rankRows.push([i+1,op.re,op.nome,op.garagem,op.funcao,op.faltas||0,op.multas||0,op.suspensoes||0,op.acidentes||0,op.score,op.status,op.resultado||"–",perda.toLocaleString("pt-BR",{minimumFractionDigits:2})]);
+        rankRows.push([i+1,op.re,op.nome,op.garagem,op.funcao,op.faltas||0,op.multas||0,op.suspensoes||0,op.acidentes||0,op.score,op.status,op.resultado||"-",perda.toLocaleString("pt-BR",{minimumFractionDigits:2})]);
       });
       const wsRank=xlsxLib.utils.aoa_to_sheet(rankRows);
       wsRank["!cols"]=[{wch:4},{wch:10},{wch:28},{wch:10},{wch:14},{wch:8},{wch:8},{wch:12},{wch:10},{wch:12},{wch:14},{wch:14},{wch:22}];
       xlsxLib.utils.book_append_sheet(wb, wsRank, "Ranking Operadores");
 
-      // Aba 3 — Sessões Mentoria
-      const sesRows=[["RE","Nome","Data","Acompanhante","Comprometimento","Causas","Setor","Relato","Denúncia","Status"]];
-      sessions.forEach(s=>sesRows.push([s.re,s.nome,s.data,s.tipoAcomp==="Sozinho"?"Sozinho":`${s.tipoAcomp}: ${s.acompanhante||""}`,s.comprometimento,(s.causas||[]).join("; "),s.setor||"–",s.relato,s.denuncia?"Sim":"Não",s.status]));
+      // Aba 3 - Sessoes Mentoria
+      const sesRows=[["RE","Nome","Data","Acompanhante","Comprometimento","Causas","Setor","Relato","Denuncia","Status"]];
+      sessions.forEach(s=>sesRows.push([s.re,s.nome,s.data,s.tipoAcomp==="Sozinho"?"Sozinho":`${s.tipoAcomp}: ${s.acompanhante||""}`,s.comprometimento,(s.causas||[]).join("; "),s.setor||"-",s.relato,s.denuncia?"Sim":"Nao",s.status]));
       const wsSes=xlsxLib.utils.aoa_to_sheet(sesRows);
       wsSes["!cols"]=[{wch:10},{wch:28},{wch:12},{wch:20},{wch:16},{wch:36},{wch:14},{wch:60},{wch:10},{wch:12}];
-      xlsxLib.utils.book_append_sheet(wb, wsSes, "Sessões Mentoria");
+      xlsxLib.utils.book_append_sheet(wb, wsSes, "Sessoes Mentoria");
 
-      // Aba 4 — Tratativas
-      const tratRows=[["RE","Nome","Área","Subárea","Data","Prazo","Prioridade","Status","Descrição","Retorno"]];
-      tratativas.forEach(t=>tratRows.push([t.re,t.nome,t.area,t.subarea||"–",t.data,t.prazo||"–",t.prioridade,t.status,t.descricao,t.retorno||"–"]));
+      // Aba 4 - Tratativas
+      const tratRows=[["RE","Nome","Area","Subarea","Data","Prazo","Prioridade","Status","Descricao","Retorno"]];
+      tratativas.forEach(t=>tratRows.push([t.re,t.nome,t.area,t.subarea||"-",t.data,t.prazo||"-",t.prioridade,t.status,t.descricao,t.retorno||"-"]));
       const wsTrat=xlsxLib.utils.aoa_to_sheet(tratRows);
       wsTrat["!cols"]=[{wch:10},{wch:26},{wch:14},{wch:20},{wch:12},{wch:12},{wch:12},{wch:14},{wch:50},{wch:50}];
       xlsxLib.utils.book_append_sheet(wb, wsTrat, "Tratativas");
 
-      // Aba 5 — Causas
-      const cauRows=[["Causa","Qtd Ocorrências","% do Total"]];
-      causasRank.forEach(c=>cauRows.push([c.name,c.value,totalCausas?Math.round(c.value/totalCausas*100)+"%":"–"]));
+      // Aba 5 - Causas
+      const cauRows=[["Causa","Qtd Ocorrencias","% do Total"]];
+      causasRank.forEach(c=>cauRows.push([c.name,c.value,totalCausas?Math.round(c.value/totalCausas*100)+"%":"-"]));
       const wsCau=xlsxLib.utils.aoa_to_sheet(cauRows);
       wsCau["!cols"]=[{wch:36},{wch:18},{wch:14}];
       xlsxLib.utils.book_append_sheet(wb, wsCau, "Causas Identificadas");
@@ -3399,11 +3426,11 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
   };
 
   const TABS=[
-    {id:"visao",    label:"📊 Visão Geral"},
+    {id:"visao",    label:"📊 Visao Geral"},
     {id:"ranking",  label:"🏆 Ranking"},
     {id:"causas",   label:"🔍 Causas"},
     {id:"tratativas",label:"🔁 Tratativas"},
-    {id:"evolucao", label:"📈 Evolução"},
+    {id:"evolucao", label:"📈 Evolucao"},
   ];
 
   return (
@@ -3413,7 +3440,7 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
       {/* Header */}
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20,flexWrap:"wrap"}} className="no-print">
         <div>
-          <div style={{fontFamily:"'Inter',sans-serif",fontSize:18,fontWeight:700}}>Relatórios Gerenciais</div>
+          <div style={{fontFamily:"'Inter',sans-serif",fontSize:18,fontWeight:700}}>Relatorios Gerenciais</div>
           <div style={{fontSize:12,color:C.muted,marginTop:2}}>Gerado em {new Date().toLocaleString("pt-BR")}</div>
         </div>
         <div style={{flex:1}}/>
@@ -3426,10 +3453,10 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
         </button>
       </div>
 
-      {/* Título para print */}
+      {/* Titulo para print */}
       <div style={{display:"none",marginBottom:20}} className="rel-print-title">
-        <div style={{fontFamily:"'Inter',sans-serif",fontSize:22,fontWeight:800}}>ELEVAMENTE — Relatório Gerencial</div>
-        <div style={{fontSize:12,color:"#666"}}>Gerado em {new Date().toLocaleString("pt-BR")} · Uso restrito — Diretoria</div>
+        <div style={{fontFamily:"'Inter',sans-serif",fontSize:22,fontWeight:800}}>ELEVAMENTE - Relatorio Gerencial</div>
+        <div style={{fontSize:12,color:"#666"}}>Gerado em {new Date().toLocaleString("pt-BR")} · Uso restrito - Diretoria</div>
       </div>
 
       {/* TABS */}
@@ -3444,7 +3471,7 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
         ))}
       </div>
 
-      {/* ══ VISÃO GERAL ══ */}
+      {/* ══ VISAO GERAL ══ */}
       {tab==="visao"&&(
         <div>
           {/* KPIs grade */}
@@ -3469,7 +3496,7 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
               <div className="ct"><span className="ctd"/>Resultado das Mentorias</div>
               <ResponsiveContainer width="100%" height={200}>
                 <PieChart>
-                  <Pie data={[{name:"Melhoraram",value:melhoraram},{name:"Em avaliação",value:avaliacao},{name:"Pioraram",value:pioraram},{name:"Aguardando",value:aguardando}]}
+                  <Pie data={[{name:"Melhoraram",value:melhoraram},{name:"Em avaliacao",value:avaliacao},{name:"Pioraram",value:pioraram},{name:"Aguardando",value:aguardando}]}
                     cx="50%" cy="50%" innerRadius={52} outerRadius={85} paddingAngle={3} dataKey="value">
                     {[C.green,C.gold,C.red,C.orange].map((c,i)=><Cell key={i} fill={c}/>)}
                   </Pie>
@@ -3477,7 +3504,7 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
                 </PieChart>
               </ResponsiveContainer>
               <div style={{display:"flex",gap:12,justifyContent:"center",flexWrap:"wrap",marginTop:8}}>
-                {[{l:"Melhoraram",v:melhoraram,c:C.green},{l:"Avaliação",v:avaliacao,c:C.gold},{l:"Pioraram",v:pioraram,c:C.red},{l:"Aguardando",v:aguardando,c:C.orange}]
+                {[{l:"Melhoraram",v:melhoraram,c:C.green},{l:"Avaliacao",v:avaliacao,c:C.gold},{l:"Pioraram",v:pioraram,c:C.red},{l:"Aguardando",v:aguardando,c:C.orange}]
                   .map(x=><div key={x.l} style={{textAlign:"center"}}>
                     <div style={{fontFamily:"'Inter',sans-serif",fontSize:18,fontWeight:800,color:x.c}}>{x.v}</div>
                     <div style={{fontSize:11,color:C.muted}}>{x.l}</div>
@@ -3485,16 +3512,16 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
               </div>
             </div>
 
-            {/* Métricas financeiras + operacionais */}
+            {/* Metricas financeiras + operacionais */}
             <div className="card">
-              <div className="ct"><span className="ctd"/>Métricas Gerais</div>
+              <div className="ct"><span className="ctd"/>Metricas Gerais</div>
               <div style={{display:"flex",flexDirection:"column",gap:14}}>
                 {[
                   {l:"Perda financeira total estimada", v:`R$ ${perdaTotal.toLocaleString("pt-BR",{minimumFractionDigits:2})}`, c:C.red, bar:100},
-                  {l:"Comprometimento médio nas sessões", v:`${compMedio} / 5`, c:compMedio>=4?C.green:compMedio>=3?C.gold:C.red, bar:compMedio/5*100},
-                  {l:"Total de sessões de mentoria", v:sessions.length, c:C.accent, bar:Math.min(sessions.length/30*100,100)},
-                  {l:"Tratativas concluídas", v:`${tratativas.filter(t=>t.status==="concluido").length} / ${tratativas.length}`, c:C.green, bar:tratativas.length?tratativas.filter(t=>t.status==="concluido").length/tratativas.length*100:0},
-                  {l:"Tratativas pendentes (urgência)", v:tratativas.filter(t=>t.status!=="concluido"&&t.prioridade==="urgente").length, c:C.red, bar:50},
+                  {l:"Comprometimento medio nas sessoes", v:`${compMedio} / 5`, c:compMedio>=4?C.green:compMedio>=3?C.gold:C.red, bar:compMedio/5*100},
+                  {l:"Total de sessoes de mentoria", v:sessions.length, c:C.accent, bar:Math.min(sessions.length/30*100,100)},
+                  {l:"Tratativas concluidas", v:`${tratativas.filter(t=>t.status==="concluido").length} / ${tratativas.length}`, c:C.green, bar:tratativas.length?tratativas.filter(t=>t.status==="concluido").length/tratativas.length*100:0},
+                  {l:"Tratativas pendentes (urgencia)", v:tratativas.filter(t=>t.status!=="concluido"&&t.prioridade==="urgente").length, c:C.red, bar:50},
                 ].map(x=>(
                   <div key={x.l}>
                     <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
@@ -3510,17 +3537,17 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
             </div>
           </div>
 
-          {/* Sessões por mês */}
+          {/* Sessoes por mes */}
           {evMensal.length>0&&(
             <div className="card">
-              <div className="ct"><span className="ctd"/>Sessões de Mentoria por Mês</div>
+              <div className="ct"><span className="ctd"/>Sessoes de Mentoria por Mes</div>
               <ResponsiveContainer width="100%" height={180}>
                 <BarChart data={evMensal} barSize={28}>
                   <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false}/>
                   <XAxis dataKey="mes" tick={{fill:C.muted,fontSize:11}} axisLine={false} tickLine={false}/>
                   <YAxis tick={{fill:C.muted,fontSize:11}} axisLine={false} tickLine={false} allowDecimals={false}/>
                   <Tooltip content={<CT3/>}/>
-                  <Bar dataKey="sessoes" fill={C.accent} radius={[6,6,0,0]} name="Sessões"/>
+                  <Bar dataKey="sessoes" fill={C.accent} radius={[6,6,0,0]} name="Sessoes"/>
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -3532,7 +3559,7 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
       {tab==="ranking"&&(
         <div>
           <div style={{padding:"12px 16px",background:`${C.orange}10`,border:`1px solid ${C.orange}25`,borderRadius:10,marginBottom:16,fontSize:12,color:C.muted}}>
-            📊 <strong style={{color:C.orange}}>Score de risco</strong> = Faltas×3 + Multas×2 + Suspensões×5 + Acidentes×4. Quanto maior, mais atenção necessária.
+            📊 <strong style={{color:C.orange}}>Score de risco</strong> = Faltas×3 + Multas×2 + Suspensoes×5 + Acidentes×4. Quanto maior, mais atencao necessaria.
           </div>
           <div className="card">
             <div className="ct"><span className="ctd"/>🏆 Ranking de Operadores por Risco</div>
@@ -3602,7 +3629,7 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
                     <XAxis type="number" tick={{fill:C.muted,fontSize:11}} axisLine={false} tickLine={false}/>
                     <YAxis dataKey="name" type="category" tick={{fill:C.muted,fontSize:11}} axisLine={false} tickLine={false} width={140}/>
                     <Tooltip content={<CT3/>}/>
-                    <Bar dataKey="value" name="Ocorrências" radius={[0,6,6,0]}>
+                    <Bar dataKey="value" name="Ocorrencias" radius={[0,6,6,0]}>
                       {causasRank.map((_,i)=><Cell key={i} fill={[C.accent,C.accent2,C.purple,C.gold,C.orange][i%5]}/>)}
                     </Bar>
                   </BarChart>
@@ -3622,7 +3649,7 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
           </div>
 
           <div className="card">
-            <div className="ct"><span className="ctd"/>Nível de comprometimento nas sessões</div>
+            <div className="ct"><span className="ctd"/>Nivel de comprometimento nas sessoes</div>
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
               {[5,4,3,2,1].map(n=>{
                 const cnt=sessions.filter(s=>s.comprometimento===n).length;
@@ -3641,7 +3668,7 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
             </div>
             <div style={{marginTop:16,padding:"12px 14px",background:C.bg,borderRadius:10,textAlign:"center"}}>
               <div style={{fontFamily:"'Inter',sans-serif",fontSize:32,fontWeight:800,color:compMedio>=4?C.green:compMedio>=3?C.gold:C.red}}>{compMedio}</div>
-              <div style={{fontSize:12,color:C.muted}}>Comprometimento médio geral</div>
+              <div style={{fontSize:12,color:C.muted}}>Comprometimento medio geral</div>
             </div>
           </div>
         </div>
@@ -3653,7 +3680,7 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
           <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14,marginBottom:20}} className="men-kpi-grid">
             {[
               {l:"Total de tratativas",  v:tratativas.length,                                  c:C.accent},
-              {l:"Concluídas",           v:tratativas.filter(t=>t.status==="concluido").length,  c:C.green},
+              {l:"Concluidas",           v:tratativas.filter(t=>t.status==="concluido").length,  c:C.green},
               {l:"Pendentes / Andamento",v:tratativas.filter(t=>t.status!=="concluido").length, c:C.orange},
             ].map(x=>(
               <div key={x.l} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"16px 20px",borderTop:`3px solid ${x.c}40`}}>
@@ -3665,7 +3692,7 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
 
           <div className="g2">
             <div className="card">
-              <div className="ct"><span className="ctd"/>Tratativas por Área</div>
+              <div className="ct"><span className="ctd"/>Tratativas por Area</div>
               {tratAreaList.map(t=>{
                 const ac=AREA_COLORS[t.area]||C.accent;
                 const pct=Math.round(t.concluido/t.total*100);
@@ -3681,7 +3708,7 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
                       <div style={{width:`${pct}%`,height:"100%",background:ac,borderRadius:4}}/>
                     </div>
                     <div style={{display:"flex",gap:8,marginTop:5}}>
-                      {[{l:"Pendente",v:t.pendente||0,c:C.red},{l:"Andamento",v:t.andamento||0,c:C.gold},{l:"Concluído",v:t.concluido||0,c:C.green}]
+                      {[{l:"Pendente",v:t.pendente||0,c:C.red},{l:"Andamento",v:t.andamento||0,c:C.gold},{l:"Concluido",v:t.concluido||0,c:C.green}]
                         .map(s=><span key={s.l} style={{fontSize:10,color:s.c,background:`${s.c}15`,borderRadius:5,padding:"2px 6px"}}>{s.l}: {s.v}</span>)}
                     </div>
                   </div>
@@ -3690,11 +3717,11 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
             </div>
 
             <div className="card">
-              <div className="ct"><span className="ctd"/>Distribuição por Status</div>
+              <div className="ct"><span className="ctd"/>Distribuicao por Status</div>
               <ResponsiveContainer width="100%" height={200}>
                 <PieChart>
                   <Pie data={[
-                    {name:"Concluído",   value:tratativas.filter(t=>t.status==="concluido").length},
+                    {name:"Concluido",   value:tratativas.filter(t=>t.status==="concluido").length},
                     {name:"Em andamento",value:tratativas.filter(t=>t.status==="andamento").length},
                     {name:"Pendente",    value:tratativas.filter(t=>t.status==="pendente").length},
                   ]} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={4} dataKey="value">
@@ -3704,7 +3731,7 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
                 </PieChart>
               </ResponsiveContainer>
               <div style={{display:"flex",gap:16,justifyContent:"center",marginTop:8}}>
-                {[{l:"Concluído",c:C.green},{l:"Andamento",c:C.gold},{l:"Pendente",c:C.red}].map(x=>(
+                {[{l:"Concluido",c:C.green},{l:"Andamento",c:C.gold},{l:"Pendente",c:C.red}].map(x=>(
                   <div key={x.l} style={{display:"flex",alignItems:"center",gap:5,fontSize:12}}>
                     <div style={{width:10,height:10,borderRadius:"50%",background:x.c}}/>
                     <span style={{color:C.muted}}>{x.l}</span>
@@ -3716,12 +3743,12 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
         </div>
       )}
 
-      {/* ══ EVOLUÇÃO ══ */}
+      {/* ══ EVOLUCAO ══ */}
       {tab==="evolucao"&&(
         <div>
           <div className="g2" style={{marginBottom:20}}>
             <div className="card">
-              <div className="ct"><span className="ctd"/>Sessões de Mentoria ao Longo do Tempo</div>
+              <div className="ct"><span className="ctd"/>Sessoes de Mentoria ao Longo do Tempo</div>
               {evMensal.length>0?(
                 <ResponsiveContainer width="100%" height={220}>
                   <AreaChart data={evMensal}>
@@ -3734,10 +3761,10 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
                     <XAxis dataKey="mes" tick={{fill:C.muted,fontSize:11}} axisLine={false} tickLine={false}/>
                     <YAxis tick={{fill:C.muted,fontSize:11}} axisLine={false} tickLine={false} allowDecimals={false}/>
                     <Tooltip content={<CT3/>}/>
-                    <Area dataKey="sessoes" fill="url(#gS)" stroke={C.accent} strokeWidth={2.5} name="Sessões"/>
+                    <Area dataKey="sessoes" fill="url(#gS)" stroke={C.accent} strokeWidth={2.5} name="Sessoes"/>
                   </AreaChart>
                 </ResponsiveContainer>
-              ):<div style={{height:220,display:"flex",alignItems:"center",justifyContent:"center",color:C.muted}}>Nenhum dado disponível</div>}
+              ):<div style={{height:220,display:"flex",alignItems:"center",justifyContent:"center",color:C.muted}}>Nenhum dado disponivel</div>}
             </div>
 
             <div className="card">
@@ -3745,7 +3772,7 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={[
                   {status:"Melhoraram",   qtd:melhoraram, fill:C.green  },
-                  {status:"Em avaliação", qtd:avaliacao,  fill:C.gold   },
+                  {status:"Em avaliacao", qtd:avaliacao,  fill:C.gold   },
                   {status:"Pioraram",     qtd:pioraram,   fill:C.red    },
                   {status:"Aguardando",   qtd:aguardando, fill:C.orange },
                 ]} barSize={40}>
@@ -3763,7 +3790,7 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
 
           {/* Perda por operador top 5 */}
           <div className="card">
-            <div className="ct"><span className="ctd"/>Top 5 — Maior Perda Financeira Estimada</div>
+            <div className="ct"><span className="ctd"/>Top 5 - Maior Perda Financeira Estimada</div>
             <div style={{display:"flex",flexDirection:"column",gap:12}}>
               {ranking.slice(0,5).map((op,i)=>{
                 const faltas=op.faltas||0,atestados=op.atestados||0,dsr=Math.round(faltas*0.70);
@@ -3793,16 +3820,16 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
         </div>
       )}
 
-      {/* Rodapé */}
+      {/* Rodape */}
       <div style={{marginTop:24,padding:"12px 0",borderTop:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between",fontSize:11,color:C.muted}} className="no-print">
-        <span>Elevamente · Relatório gerado em {new Date().toLocaleString("pt-BR")}</span>
-        <span style={{fontStyle:"italic"}}>Uso restrito — Diretoria</span>
+        <span>Elevamente · Relatorio gerado em {new Date().toLocaleString("pt-BR")}</span>
+        <span style={{fontStyle:"italic"}}>Uso restrito - Diretoria</span>
       </div>
     </div>
   );
 };
 
-// ─── PARÂMETROS PAGE ──────────────────────────────────────────────────────────
+// ─── PARAMETROS PAGE ──────────────────────────────────────────────────────────
 const ParametrosPage = ({ custos, onSave }) => {
   const [form, setForm] = useState({ ...custos });
   const [saved, setSaved] = useState(false);
@@ -3812,13 +3839,13 @@ const ParametrosPage = ({ custos, onSave }) => {
   const handleSave = () => {
     onSave(form);
     setSaved(true);
-    toast("Parâmetros financeiros salvos com sucesso!", "success");
+    toast("Parametros financeiros salvos com sucesso!", "success");
     setTimeout(()=>setSaved(false), 2500);
   };
 
   const handleReset = () => setForm({ ...CUSTOS_PADRAO });
 
-  // Preview de cálculo para um operador exemplo com os parâmetros atuais
+  // Preview de calculo para um operador exemplo com os parametros atuais
   const PREVIEW = { faltas:10, atestados:3, multas:2, suspensoes:1, acidentes:0, multasValor:586.94 };
   const previewMOT  = calcPerdaFinanceira({ ...PREVIEW, funcao:"Motorista",    multasValor:586.94 }, form);
   const previewCOB  = calcPerdaFinanceira({ ...PREVIEW, funcao:"Cobrador",     multasValor:0      }, form);
@@ -3857,14 +3884,14 @@ const ParametrosPage = ({ custos, onSave }) => {
       {/* Header */}
       <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:24, flexWrap:"wrap" }}>
         <div>
-          <div style={{ fontFamily:"'Inter',sans-serif", fontSize:20, fontWeight:800 }}>⚙️ Parâmetros Financeiros</div>
-          <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>Configure os valores base para o cálculo de perda financeira dos operadores.</div>
+          <div style={{ fontFamily:"'Inter',sans-serif", fontSize:20, fontWeight:800 }}>⚙️ Parametros Financeiros</div>
+          <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>Configure os valores base para o calculo de perda financeira dos operadores.</div>
         </div>
         <div style={{ flex:1 }}/>
-        <button className="abt" style={{ padding:"8px 16px", color:C.muted, borderColor:C.border }} onClick={handleReset}>↺ Restaurar padrões</button>
+        <button className="abt" style={{ padding:"8px 16px", color:C.muted, borderColor:C.border }} onClick={handleReset}>↺ Restaurar padroes</button>
         <button onClick={handleSave} style={{ padding:"10px 24px", borderRadius:10, border:"none", cursor:"pointer", fontFamily:"'Inter',sans-serif", fontSize:14, fontWeight:800,
           background: saved ? `linear-gradient(135deg,${C.green},${C.accent2})` : `linear-gradient(135deg,${C.accent},${C.accent2})`, color:"#000", transition:"all .3s" }}>
-          {saved ? "✓ Salvo!" : "💾 Salvar Parâmetros"}
+          {saved ? "✓ Salvo!" : "💾 Salvar Parametros"}
         </button>
       </div>
 
@@ -3872,28 +3899,28 @@ const ParametrosPage = ({ custos, onSave }) => {
       <div style={{ background:`${C.gold}10`, border:`1px solid ${C.gold}30`, borderRadius:12, padding:"12px 18px", marginBottom:20, fontSize:13, color:C.muted, display:"flex", alignItems:"flex-start", gap:10 }}>
         <span style={{ fontSize:20 }}>💡</span>
         <div>
-          <strong style={{ color:C.gold }}>Como obter os valores corretos:</strong> Valor dia = salário base mensal ÷ 30. Os valores padrão são baseados no relatório real do operador RE5319 (MOT = R$ 136,08/dia · VR = R$ 38,28).
+          <strong style={{ color:C.gold }}>Como obter os valores corretos:</strong> Valor dia = salario base mensal ÷ 30. Os valores padrao sao baseados no relatorio real do operador RE5319 (MOT = R$ 136,08/dia · VR = R$ 38,28).
           Altere para os valores do seu contrato coletivo de trabalho.
         </div>
       </div>
 
       <div className="g2" style={{ marginBottom:0 }}>
         <div>
-          {/* Valor dia por função */}
-          <Section title="Valor Diário por Função" icon="💼">
+          {/* Valor dia por funcao */}
+          <Section title="Valor Diario por Funcao" icon="💼">
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }} className="form-grid-2">
-              <Field k="valorDiaMOT"   label="Valor Dia — Motorista (MOT)"    hint="Salário base MOT ÷ 30 dias" />
-              <Field k="valorDiaCOB"   label="Valor Dia — Cobrador (COB)"     hint="Salário base COB ÷ 30 dias" />
-              <Field k="valorDiaFISC"  label="Valor Dia — Fiscal (FISC)"      hint="Salário base FISC ÷ 30 dias"/>
-              <Field k="valorDiaCOORD" label="Valor Dia — Coordenador (COORD)" hint="Salário base COORD ÷ 30 dias"/>
+              <Field k="valorDiaMOT"   label="Valor Dia - Motorista (MOT)"    hint="Salario base MOT ÷ 30 dias" />
+              <Field k="valorDiaCOB"   label="Valor Dia - Cobrador (COB)"     hint="Salario base COB ÷ 30 dias" />
+              <Field k="valorDiaFISC"  label="Valor Dia - Fiscal (FISC)"      hint="Salario base FISC ÷ 30 dias"/>
+              <Field k="valorDiaCOORD" label="Valor Dia - Coordenador (COORD)" hint="Salario base COORD ÷ 30 dias"/>
             </div>
           </Section>
 
-          {/* Benefícios */}
-          <Section title="Benefícios Diários" icon="🎟️">
+          {/* Beneficios */}
+          <Section title="Beneficios Diarios" icon="🎟️">
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }} className="form-grid-2">
-              <Field k="valorVR" label="Vale Refeição (VR) por dia"  hint="Valor do ticket refeição diário" />
-              <Field k="valorVT" label="Vale Transporte (VT) por dia" hint="Valor do VT diário (perdido em faltas)" />
+              <Field k="valorVR" label="Vale Refeicao (VR) por dia"  hint="Valor do ticket refeicao diario" />
+              <Field k="valorVT" label="Vale Transporte (VT) por dia" hint="Valor do VT diario (perdido em faltas)" />
             </div>
           </Section>
 
@@ -3902,13 +3929,13 @@ const ParametrosPage = ({ custos, onSave }) => {
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }} className="form-grid-2">
               <Field k="valorHoraExtra" label="Hora extra do substituto (R$)" hint="Custo/hora do motorista substituto" />
               <div>
-                <div style={{ fontSize:12, color:C.muted, marginBottom:4, fontWeight:500 }}>Horas de substituição por dia</div>
+                <div style={{ fontSize:12, color:C.muted, marginBottom:4, fontWeight:500 }}>Horas de substituicao por dia</div>
                 <input style={{ ...inputStyle, paddingLeft:14 }} type="number" step="1" min="0" value={form.horasSubst}
                   onChange={e=>setForm(f=>({...f,horasSubst:parseInt(e.target.value)||0}))}
                   onFocus={e=>e.target.style.borderColor=C.accent} onBlur={e=>e.target.style.borderColor=C.border}/>
-                <div style={{ fontSize:11, color:C.muted, marginTop:3, fontStyle:"italic" }}>Quantas horas/dia a substituição cobre</div>
+                <div style={{ fontSize:11, color:C.muted, marginTop:3, fontStyle:"italic" }}>Quantas horas/dia a substituicao cobre</div>
               </div>
-              <Field k="taxaAdmMulta" label="Taxa administrativa por auto de infração" hint="Custo interno p/ processar cada multa" />
+              <Field k="taxaAdmMulta" label="Taxa administrativa por auto de infracao" hint="Custo interno p/ processar cada multa" />
             </div>
           </Section>
         </div>
@@ -3918,14 +3945,14 @@ const ParametrosPage = ({ custos, onSave }) => {
           <Section title="Encargos sobre Dias Perdidos" icon="📊">
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginBottom:16 }} className="form-grid-2">
               <div>
-                <div style={{ fontSize:12, color:C.muted, marginBottom:4, fontWeight:500 }}>FGTS sobre férias perdidas (%)</div>
+                <div style={{ fontSize:12, color:C.muted, marginBottom:4, fontWeight:500 }}>FGTS sobre ferias perdidas (%)</div>
                 <div style={{ position:"relative", display:"flex", alignItems:"center" }}>
                   <input style={{ ...inputStyle, paddingRight:30 }} type="number" step="0.01" min="0" max="100" value={form.percFGTS}
                     onChange={e=>upd("percFGTS",e.target.value)}
                     onFocus={e=>e.target.style.borderColor=C.accent} onBlur={e=>e.target.style.borderColor=C.border}/>
                   <span style={{ position:"absolute", right:12, fontSize:12, color:C.muted }}>%</span>
                 </div>
-                <div style={{ fontSize:11, color:C.muted, marginTop:3, fontStyle:"italic" }}>Alíquota FGTS sobre dias de férias perdidos</div>
+                <div style={{ fontSize:11, color:C.muted, marginTop:3, fontStyle:"italic" }}>Aliquota FGTS sobre dias de ferias perdidos</div>
               </div>
               <div>
                 <div style={{ fontSize:12, color:C.muted, marginBottom:4, fontWeight:500 }}>13º proporcional perdido por falta (%)</div>
@@ -3935,24 +3962,24 @@ const ParametrosPage = ({ custos, onSave }) => {
                     onFocus={e=>e.target.style.borderColor=C.accent} onBlur={e=>e.target.style.borderColor=C.border}/>
                   <span style={{ position:"absolute", right:12, fontSize:12, color:C.muted }}>%</span>
                 </div>
-                <div style={{ fontSize:11, color:C.muted, marginTop:3, fontStyle:"italic" }}>1 mês = 8,33% (1/12 do 13º salário)</div>
+                <div style={{ fontSize:11, color:C.muted, marginTop:3, fontStyle:"italic" }}>1 mes = 8,33% (1/12 do 13º salario)</div>
               </div>
             </div>
 
-            {/* Fórmula explicada */}
+            {/* Formula explicada */}
             <div style={{ background:C.bg, borderRadius:10, padding:"14px 16px", fontSize:12, lineHeight:1.9, color:C.muted }}>
-              <div style={{ fontWeight:700, color:C.text, marginBottom:6, fontSize:13 }}>📐 Componentes do cálculo financeiro:</div>
+              <div style={{ fontWeight:700, color:C.text, marginBottom:6, fontSize:13 }}>📐 Componentes do calculo financeiro:</div>
               {[
                 { item:"Faltas × valor dia",             ex:"10 × R$136,08 = R$1.360,80",  cor:C.red    },
                 { item:"DSR (≈70% das faltas) × valor dia",ex:"7 × R$136,08 = R$952,56",  cor:C.orange },
-                { item:"Férias perdidas × valor dia",    ex:"6 dias × R$136,08 = R$816,48", cor:C.gold   },
-                { item:"Abono 1/3 sobre férias perdidas",ex:"6 × R$45,36 = R$272,16",      cor:C.gold   },
-                { item:"Atestados × VR diário",          ex:"3 × R$38,28 = R$114,84",       cor:C.muted  },
-                { item:"Faltas × VT diário",             ex:"10 × R$12,00 = R$120,00",      cor:C.muted  },
+                { item:"Ferias perdidas × valor dia",    ex:"6 dias × R$136,08 = R$816,48", cor:C.gold   },
+                { item:"Abono 1/3 sobre ferias perdidas",ex:"6 × R$45,36 = R$272,16",      cor:C.gold   },
+                { item:"Atestados × VR diario",          ex:"3 × R$38,28 = R$114,84",       cor:C.muted  },
+                { item:"Faltas × VT diario",             ex:"10 × R$12,00 = R$120,00",      cor:C.muted  },
                 { item:"Faltas × (H.extra × horas/dia)", ex:"10 × R$200,00 = R$2.000,00",   cor:C.purple },
-                { item:"Suspensões × valor dia",         ex:"1 × R$136,08 = R$136,08",      cor:C.purple },
+                { item:"Suspensoes × valor dia",         ex:"1 × R$136,08 = R$136,08",      cor:C.purple },
                 { item:"13º proporcional (% × dia × faltas)", ex:"8,33% × R$136,08 × 10",  cor:C.muted  },
-                { item:"FGTS sobre férias (% × dia × dias)", ex:"8% × R$136,08 × 6",       cor:C.muted  },
+                { item:"FGTS sobre ferias (% × dia × dias)", ex:"8% × R$136,08 × 6",       cor:C.muted  },
                 { item:"Valor das multas + taxa adm.",   ex:"R$586,94 + (2 × R$50)",        cor:C.red    },
               ].map((x,i)=>(
                 <div key={i} style={{ display:"flex", alignItems:"baseline", gap:8, padding:"2px 0" }}>
@@ -3965,7 +3992,7 @@ const ParametrosPage = ({ custos, onSave }) => {
           </Section>
 
           {/* Preview de perda estimada com valores atuais */}
-          <Section title="Preview — Perda Estimada (Exemplo: 10 faltas, 3 atestados, 2 multas)" icon="💸">
+          <Section title="Preview - Perda Estimada (Exemplo: 10 faltas, 3 atestados, 2 multas)" icon="💸">
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10 }}>
               {[
                 { fn:"Motorista",    perda:previewMOT.totalGeral,  cor:C.accent  },
@@ -3982,30 +4009,30 @@ const ParametrosPage = ({ custos, onSave }) => {
               ))}
             </div>
             <div style={{ fontSize:11, color:C.muted, marginTop:10, fontStyle:"italic", textAlign:"center" }}>
-              Os valores do preview atualizam em tempo real conforme você edita os parâmetros
+              Os valores do preview atualizam em tempo real conforme voce edita os parametros
             </div>
           </Section>
         </div>
       </div>
 
-      {/* Tabela referência */}
+      {/* Tabela referencia */}
       <div className="card" style={{ marginTop:4 }}>
-        <div className="ct"><span className="ctd"/>📋 Parâmetros Salvos Atualmente</div>
+        <div className="ct"><span className="ctd"/>📋 Parametros Salvos Atualmente</div>
         <div className="tw">
           <table>
-            <thead><tr><th>Parâmetro</th><th>Descrição</th><th style={{ textAlign:"right" }}>Valor Atual</th><th style={{ textAlign:"right" }}>Padrão</th></tr></thead>
+            <thead><tr><th>Parametro</th><th>Descricao</th><th style={{ textAlign:"right" }}>Valor Atual</th><th style={{ textAlign:"right" }}>Padrao</th></tr></thead>
             <tbody>
               {[
-                { k:"valorDiaMOT",   l:"Valor dia Motorista",          d:"Salário diário MOT",              pad:136.08, pref:"R$" },
-                { k:"valorDiaCOB",   l:"Valor dia Cobrador",           d:"Salário diário COB",              pad:120.00, pref:"R$" },
-                { k:"valorDiaFISC",  l:"Valor dia Fiscal",             d:"Salário diário FISC",             pad:150.00, pref:"R$" },
-                { k:"valorDiaCOORD", l:"Valor dia Coordenador",        d:"Salário diário COORD",            pad:180.00, pref:"R$" },
-                { k:"valorVR",       l:"Vale Refeição",                d:"VR diário (perdido em atestados)",pad:38.28,  pref:"R$" },
-                { k:"valorVT",       l:"Vale Transporte",              d:"VT diário (perdido em faltas)",   pad:12.00,  pref:"R$" },
+                { k:"valorDiaMOT",   l:"Valor dia Motorista",          d:"Salario diario MOT",              pad:136.08, pref:"R$" },
+                { k:"valorDiaCOB",   l:"Valor dia Cobrador",           d:"Salario diario COB",              pad:120.00, pref:"R$" },
+                { k:"valorDiaFISC",  l:"Valor dia Fiscal",             d:"Salario diario FISC",             pad:150.00, pref:"R$" },
+                { k:"valorDiaCOORD", l:"Valor dia Coordenador",        d:"Salario diario COORD",            pad:180.00, pref:"R$" },
+                { k:"valorVR",       l:"Vale Refeicao",                d:"VR diario (perdido em atestados)",pad:38.28,  pref:"R$" },
+                { k:"valorVT",       l:"Vale Transporte",              d:"VT diario (perdido em faltas)",   pad:12.00,  pref:"R$" },
                 { k:"valorHoraExtra",l:"Hora extra substituto",        d:"Custo/hora do substituto",        pad:25.00,  pref:"R$" },
-                { k:"horasSubst",    l:"Horas substituição/dia",       d:"Horas cobertas por falta",        pad:8,      pref:"h"  },
-                { k:"taxaAdmMulta",  l:"Taxa administrativa por multa",d:"Custo interno/auto de infração",  pad:50.00,  pref:"R$" },
-                { k:"percFGTS",      l:"FGTS sobre férias perdidas",   d:"% sobre dias de férias perdidos", pad:8.00,   pref:"%"  },
+                { k:"horasSubst",    l:"Horas substituicao/dia",       d:"Horas cobertas por falta",        pad:8,      pref:"h"  },
+                { k:"taxaAdmMulta",  l:"Taxa administrativa por multa",d:"Custo interno/auto de infracao",  pad:50.00,  pref:"R$" },
+                { k:"percFGTS",      l:"FGTS sobre ferias perdidas",   d:"% sobre dias de ferias perdidos", pad:8.00,   pref:"%"  },
                 { k:"perc13",        l:"13º proporcional",             d:"% perdido por falta (1/12)",      pad:8.33,   pref:"%"  },
               ].map(x=>{
                 const atual = form[x.k]??0;
@@ -4035,9 +4062,9 @@ const ParametrosPage = ({ custos, onSave }) => {
           fontFamily:"'Inter',sans-serif", fontSize:16, fontWeight:800, letterSpacing:.5,
           background: saved ? `linear-gradient(135deg,${C.green},${C.accent2})` : `linear-gradient(135deg,${C.accent},${C.accent2})`,
           color:"#000", transition:"all .3s", boxShadow:`0 4px 20px ${C.accent}40` }}>
-          {saved ? "✓ Parâmetros Salvos com Sucesso!" : "💾 Salvar Parâmetros"}
+          {saved ? "✓ Parametros Salvos com Sucesso!" : "💾 Salvar Parametros"}
         </button>
-        <div style={{ fontSize:11, color:C.muted, marginTop:8 }}>Os parâmetros são aplicados a todos os cálculos financeiros do sistema.</div>
+        <div style={{ fontSize:11, color:C.muted, marginTop:8 }}>Os parametros sao aplicados a todos os calculos financeiros do sistema.</div>
       </div>
     </div>
   );
@@ -4053,24 +4080,24 @@ const AGENDA_INIT = [
   // Esta semana
   { id:1,  re:"RE5319", nome:"Carlos A. Mendes",    tipo:"Mentoria inicial",    hora:"09:00", data:fmtDate(hoje),           durMin:60,  status:"confirmado", obs:"Acompanhante: esposa", local:"Sala RH"   },
   { id:2,  re:"RE4201", nome:"Marcos P. Lima",      tipo:"Acompanhamento",      hora:"10:30", data:fmtDate(hoje),           durMin:45,  status:"confirmado", obs:"",                    local:"RH"        },
-  { id:3,  re:"RE6014", nome:"Rafael T. Santos",    tipo:"Mentoria inicial",    hora:"14:00", data:fmtDate(hoje),           durMin:60,  status:"pendente",   obs:"Aguarda confirmação", local:"Sala 1"    },
-  { id:4,  re:"RE3887", nome:"João S. Oliveira",    tipo:"Retorno psicólogo",   hora:"16:00", data:fmtDate(hoje),           durMin:30,  status:"confirmado", obs:"",                    local:"Psicologia"},
+  { id:3,  re:"RE6014", nome:"Rafael T. Santos",    tipo:"Mentoria inicial",    hora:"14:00", data:fmtDate(hoje),           durMin:60,  status:"pendente",   obs:"Aguarda confirmacao", local:"Sala 1"    },
+  { id:4,  re:"RE3887", nome:"Joao S. Oliveira",    tipo:"Retorno psicologo",   hora:"16:00", data:fmtDate(hoje),           durMin:30,  status:"confirmado", obs:"",                    local:"Psicologia"},
   { id:5,  re:"RE5507", nome:"Paulo B. Rodrigues",  tipo:"Acompanhamento",      hora:"08:30", data:fmtDate(addDays(hoje,1)),durMin:45,  status:"confirmado", obs:"",                    local:"RH"        },
   { id:6,  re:"RE7801", nome:"Felipe A. Nascimento",tipo:"Mentoria inicial",    hora:"11:00", data:fmtDate(addDays(hoje,1)),durMin:60,  status:"pendente",   obs:"Primeira vez",        local:"Sala RH"   },
   { id:7,  re:"RE3341", nome:"Sandro P. Ferreira",  tipo:"Acompanhamento",      hora:"14:30", data:fmtDate(addDays(hoje,2)),durMin:45,  status:"confirmado", obs:"",                    local:"RH"        },
   { id:8,  re:"RE1023", nome:"Ezequiel D. Fonseca", tipo:"Mentoria inicial",    hora:"09:00", data:fmtDate(addDays(hoje,3)),durMin:60,  status:"agendado",   obs:"Novo no programa",    local:"Sala RH"   },
-  { id:9,  re:"RE6602", nome:"Odair C. Magalhães",  tipo:"Retorno ambulatório", hora:"15:00", data:fmtDate(addDays(hoje,3)),durMin:30,  status:"confirmado", obs:"",                    local:"Ambulatório"},
+  { id:9,  re:"RE6602", nome:"Odair C. Magalhaes",  tipo:"Retorno ambulatorio", hora:"15:00", data:fmtDate(addDays(hoje,3)),durMin:30,  status:"confirmado", obs:"",                    local:"Ambulatorio"},
   { id:10, re:"RE5671", nome:"Rosivaldo C. Moura",  tipo:"Mentoria inicial",    hora:"10:00", data:fmtDate(addDays(hoje,5)),durMin:60,  status:"agendado",   obs:"",                    local:"Sala RH"   },
-  { id:11, re:"RE2934", nome:"André M. Costa",      tipo:"Acompanhamento",      hora:"13:00", data:fmtDate(addDays(hoje,5)),durMin:45,  status:"confirmado", obs:"Evolução positiva",   local:"RH"        },
-  { id:12, re:"RE4201", nome:"Marcos P. Lima",      tipo:"Retorno jurídico",    hora:"16:30", data:fmtDate(addDays(hoje,7)),durMin:30,  status:"agendado",   obs:"",                    local:"Jurídico"  },
+  { id:11, re:"RE2934", nome:"Andre M. Costa",      tipo:"Acompanhamento",      hora:"13:00", data:fmtDate(addDays(hoje,5)),durMin:45,  status:"confirmado", obs:"Evolucao positiva",   local:"RH"        },
+  { id:12, re:"RE4201", nome:"Marcos P. Lima",      tipo:"Retorno juridico",    hora:"16:30", data:fmtDate(addDays(hoje,7)),durMin:30,  status:"agendado",   obs:"",                    local:"Juridico"  },
 ];
 
 const TIPO_COLORS = {
   "Mentoria inicial":   { color:"#00D4FF", bg:"#00D4FF18", icon:"🎯" },
   "Acompanhamento":     { color:"#10B981", bg:"#10B98118", icon:"📋" },
-  "Retorno psicólogo":  { color:"#8B5CF6", bg:"#8B5CF618", icon:"🧠" },
-  "Retorno ambulatório":{ color:"#10B981", bg:"#10B98118", icon:"🏥" },
-  "Retorno jurídico":   { color:"#F97316", bg:"#F9731618", icon:"⚖️" },
+  "Retorno psicologo":  { color:"#8B5CF6", bg:"#8B5CF618", icon:"🧠" },
+  "Retorno ambulatorio":{ color:"#10B981", bg:"#10B98118", icon:"🏥" },
+  "Retorno juridico":   { color:"#F97316", bg:"#F9731618", icon:"⚖️" },
   "Retorno RH":         { color:"#0091FF", bg:"#0091FF18", icon:"👔" },
 };
 const STATUS_AGENDA = {
@@ -4084,6 +4111,9 @@ const STATUS_AGENDA = {
 // ─── AGENDA PAGE ──────────────────────────────────────────────────────────────
 const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
   const [view, setView]           = useState("semana"); // semana | lista | calendario
+  const [calYear,  setCalYear]    = useState(new Date().getFullYear());
+  const [calMonth, setCalMonth]   = useState(new Date().getMonth()); // 0-indexed
+  const [calSelDay,setCalSelDay]  = useState(null); // "YYYY-MM-DD"
   const [showModal, setShowModal] = useState(false);
   const [editItem, setEditItem]   = useState(null);
   const [filtStatus, setFiltStatus] = useState("todos");
@@ -4105,10 +4135,10 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
         "RE":           a.re,
         "Operador":     a.nome,
         "Tipo":         a.tipo,
-        "Local":        a.local||"–",
-        "Duração (min)":a.durMin,
+        "Local":        a.local||"-",
+        "Duracao (min)":a.durMin,
         "Status":       STATUS_AGENDA[a.status]?.label||a.status,
-        "Observação":   a.obs||"–",
+        "Observacao":   a.obs||"-",
       }));
       const ws = xlsxLib.utils.json_to_sheet(rows);
       ws["!cols"]=[{wch:12},{wch:8},{wch:10},{wch:28},{wch:22},{wch:16},{wch:14},{wch:14},{wch:40}];
@@ -4206,7 +4236,7 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
             </div>
             {a.obs && <div style={{fontSize:11,color:C.muted,marginTop:3,fontStyle:"italic"}}>{a.obs}</div>}
           </div>
-          {/* Status + ações */}
+          {/* Status + acoes */}
           <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
             <span className="pill" style={{color:st.color,background:st.bg,fontSize:10}}>● {st.label}</span>
             {!compact && (
@@ -4240,14 +4270,14 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
                 <select style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none"}}
                   value={form.re} onChange={e=>{const op=operators.find(o=>o.re===e.target.value);upd("re",e.target.value);if(op)upd("nome",op.nome);}}>
                   <option value="">Selecione...</option>
-                  {operators.map(o=><option key={o.re} value={o.re}>{o.re} – {o.nome}</option>)}
+                  {operators.map(o=><option key={o.re} value={o.re}>{o.re} - {o.nome}</option>)}
                 </select>
               </div>
               <div>
                 <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Tipo de encontro *</div>
                 <select style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none"}}
                   value={form.tipo} onChange={e=>upd("tipo",e.target.value)}>
-                  {["Mentoria inicial","Acompanhamento","Retorno psicólogo","Retorno ambulatório","Retorno jurídico","Retorno RH"].map(t=><option key={t}>{t}</option>)}
+                  {["Mentoria inicial","Acompanhamento","Retorno psicologo","Retorno ambulatorio","Retorno juridico","Retorno RH"].map(t=><option key={t}>{t}</option>)}
                 </select>
               </div>
               <div>
@@ -4256,12 +4286,12 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
                   placeholder="dd/mm/aa" value={form.data} onChange={e=>upd("data",e.target.value)}/>
               </div>
               <div>
-                <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Horário *</div>
+                <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Horario *</div>
                 <input style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none"}}
                   type="time" value={form.hora} onChange={e=>upd("hora",e.target.value)}/>
               </div>
               <div>
-                <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Duração (minutos)</div>
+                <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Duracao (minutos)</div>
                 <select style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none"}}
                   value={form.durMin} onChange={e=>upd("durMin",parseInt(e.target.value))}>
                   {[30,45,60,90,120].map(d=><option key={d} value={d}>{d} min</option>)}
@@ -4271,7 +4301,7 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
                 <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Local</div>
                 <select style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none"}}
                   value={form.local} onChange={e=>upd("local",e.target.value)}>
-                  {["Sala RH","RH","Sala 1","Sala 2","Psicologia","Ambulatório","Jurídico","Online","Externo"].map(l=><option key={l}>{l}</option>)}
+                  {["Sala RH","RH","Sala 1","Sala 2","Psicologia","Ambulatorio","Juridico","Online","Externo"].map(l=><option key={l}>{l}</option>)}
                 </select>
               </div>
             </div>
@@ -4287,16 +4317,16 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
               </div>
             </div>
             <div style={{marginBottom:16}}>
-              <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Observação</div>
+              <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Observacao</div>
               <textarea style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,
                 fontFamily:"'Inter',sans-serif",width:"100%",outline:"none",resize:"vertical",minHeight:60}}
-                placeholder="Acompanhante, orientações especiais..." value={form.obs} onChange={e=>upd("obs",e.target.value)}/>
+                placeholder="Acompanhante, orientacoes especiais..." value={form.obs} onChange={e=>upd("obs",e.target.value)}/>
             </div>
             <div style={{display:"flex",gap:8}}>
               <button onClick={handleSave} disabled={!form.re||!form.data||!form.hora}
                 style={{flex:1,padding:"11px",background:form.re&&form.data&&form.hora?`linear-gradient(135deg,${C.accent},${C.accent2})`:`${C.border}`,
                   color:form.re&&form.data&&form.hora?"#000":C.muted,border:"none",borderRadius:10,fontFamily:"'Inter',sans-serif",fontSize:14,fontWeight:700,cursor:"pointer"}}>
-                {editItem?"💾 Salvar alterações":"📅 Confirmar agendamento"}
+                {editItem?"💾 Salvar alteracoes":"📅 Confirmar agendamento"}
               </button>
               {editItem && <button onClick={()=>{handleDelete(editItem.id);setShowModal(false);}}
                 style={{padding:"11px 16px",background:`${C.red}18`,color:C.red,border:`1px solid ${C.red}30`,borderRadius:10,fontSize:13,cursor:"pointer",fontWeight:600}}>🗑</button>}
@@ -4314,7 +4344,7 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
         </div>
         <div style={{flex:1}}/>
         <div style={{display:"flex",background:C.surface,borderRadius:9,padding:3,gap:3}}>
-          {[{id:"semana",l:"Semana"},{id:"lista",l:"Lista"},{id:"calendario",l:"Calendário"}].map(v=>(
+          {[{id:"semana",l:"Semana"},{id:"lista",l:"Lista"},{id:"calendario",l:"Calendario"}].map(v=>(
             <button key={v.id} onClick={()=>setView(v.id)} style={{padding:"6px 14px",borderRadius:7,border:"none",cursor:"pointer",fontSize:12,fontWeight:600,
               background:view===v.id?C.card:"transparent",color:view===v.id?C.accent:C.muted,transition:"all .2s"}}>
               {v.l}
@@ -4361,7 +4391,7 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
         <span style={{fontSize:12,color:C.muted}}>{filtered.length} compromisso{filtered.length!==1?"s":""}</span>
       </div>
 
-      {/* ══ VISÃO SEMANA ══ */}
+      {/* ══ VISAO SEMANA ══ */}
       {view==="semana" && (
         <div>
           {/* Strip 7 dias */}
@@ -4376,7 +4406,7 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
                   <div style={{fontFamily:"'Inter',sans-serif",fontSize:20,fontWeight:800,color:d.isToday?C.accent:C.text,marginBottom:6}}>{d.num}</div>
                   {items.length>0
                     ? <div style={{fontFamily:"'Inter',sans-serif",fontSize:14,fontWeight:700,color:d.isToday?C.accent:C.accent2}}>{items.length}</div>
-                    : <div style={{fontSize:11,color:C.muted}}>–</div>}
+                    : <div style={{fontSize:11,color:C.muted}}>-</div>}
                   {items.length>0&&<div style={{fontSize:9,color:C.muted}}>item{items.length!==1?"s":""}</div>}
                 </div>
               );
@@ -4388,14 +4418,14 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
             <div className="card" style={{marginBottom:20,borderColor:`${C.accent}40`}}>
               <div className="ct" style={{marginBottom:12}}>
                 <span className="ctd"/>
-                <span style={{color:C.accent}}>🔵 Hoje — {new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"2-digit",month:"long"})}</span>
+                <span style={{color:C.accent}}>🔵 Hoje - {new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"2-digit",month:"long"})}</span>
                 <span style={{marginLeft:"auto",fontSize:11,color:C.muted}}>{deHoje.length} compromisso{deHoje.length!==1?"s":""}</span>
               </div>
               {deHoje.sort((a,b)=>a.hora.localeCompare(b.hora)).map(a=><CardItem key={a.id} a={a}/>)}
             </div>
           )}
 
-          {/* Próximos dias */}
+          {/* Proximos dias */}
           {datesSorted.filter(d=>d!==hoje_str).map(d=>(
             <div key={d} style={{marginBottom:16}}>
               <div style={{fontSize:12,fontWeight:700,color:C.muted,marginBottom:8,display:"flex",alignItems:"center",gap:8}}>
@@ -4417,7 +4447,7 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
           <div className="tw">
             <table>
               <thead>
-                <tr><th>Data</th><th>Hora</th><th>RE</th><th>Operador</th><th>Tipo</th><th>Local</th><th>Duração</th><th>Status</th><th>Obs</th><th></th></tr>
+                <tr><th>Data</th><th>Hora</th><th>RE</th><th>Operador</th><th>Tipo</th><th>Local</th><th>Duracao</th><th>Status</th><th>Obs</th><th></th></tr>
               </thead>
               <tbody>
                 {datesSorted.flatMap(d=>byDate[d]).map(a=>{
@@ -4441,7 +4471,7 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
                       <td style={{fontSize:12,color:C.muted}}>{a.local}</td>
                       <td style={{fontSize:12,color:C.muted,whiteSpace:"nowrap"}}>{a.durMin}min</td>
                       <td><span className="pill" style={{color:st.color,background:st.bg,fontSize:10}}>● {st.label}</span></td>
-                      <td style={{fontSize:11,color:C.muted,maxWidth:140,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.obs||"–"}</td>
+                      <td style={{fontSize:11,color:C.muted,maxWidth:140,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.obs||"-"}</td>
                       <td>
                         <div style={{display:"flex",gap:4}}>
                           <button onClick={e=>{e.stopPropagation();handleStatus(a.id,"realizado");}}
@@ -4460,23 +4490,29 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
         </div>
       )}
 
-      {/* ══ CALENDÁRIO MENSAL ══ */}
+      {/* ══ CALENDARIO MENSAL ══ */}
       {view==="calendario" && (
         <div className="card">
-          <div className="ct"><span className="ctd"/>
-            {new Date().toLocaleDateString("pt-BR",{month:"long",year:"numeric"}).replace(/^\w/,c=>c.toUpperCase())}
+          {/* Calendar header with navigation */}
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+            <button onClick={()=>{ const d=new Date(calYear,calMonth-1,1); setCalYear(d.getFullYear()); setCalMonth(d.getMonth()); }}
+              style={{background:C.border,border:"none",color:C.text,padding:"4px 12px",borderRadius:7,cursor:"pointer",fontSize:16,fontWeight:700}}>‹</button>
+            <div style={{fontFamily:"'Inter',sans-serif",fontWeight:700,fontSize:15,color:C.text}}>
+              {new Date(calYear,calMonth,1).toLocaleDateString("pt-BR",{month:"long",year:"numeric"}).replace(/^\w/,c=>c.toUpperCase())}
+            </div>
+            <button onClick={()=>{ const d=new Date(calYear,calMonth+1,1); setCalYear(d.getFullYear()); setCalMonth(d.getMonth()); }}
+              style={{background:C.border,border:"none",color:C.text,padding:"4px 12px",borderRadius:7,cursor:"pointer",fontSize:16,fontWeight:700}}>›</button>
           </div>
           {/* Dias da semana header */}
           <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:8}}>
-            {["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"].map(d=>(
+            {["Dom","Seg","Ter","Qua","Qui","Sex","Sab"].map(d=>(
               <div key={d} style={{textAlign:"center",fontSize:11,fontWeight:700,color:C.muted,padding:"4px 0"}}>{d}</div>
             ))}
           </div>
-          {/* Células do calendário */}
+          {/* Celulas do calendario */}
           {(()=>{
-            const now=new Date(); now.setDate(1);
-            const startDay=now.getDay();
-            const daysInMonth=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
+            const startDay=new Date(calYear,calMonth,1).getDay();
+            const daysInMonth=new Date(calYear,calMonth+1,0).getDate();
             const cells=[];
             for(let i=0;i<startDay;i++) cells.push(null);
             for(let d=1;d<=daysInMonth;d++) cells.push(d);
@@ -4487,16 +4523,21 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
               <div key={ri} style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:4}}>
                 {row.map((day,ci)=>{
                   if(!day) return <div key={ci}/>;
-                  const dateStr=fmtDate(new Date(hoje.getFullYear(),hoje.getMonth(),day));
+                  const dateStr=fmtDate(new Date(calYear,calMonth,day));
                   const items=(byDate[dateStr]||[]);
-                  const isToday=day===hoje.getDate();
+                  const isToday=(day===hoje.getDate()&&calMonth===hoje.getMonth()&&calYear===hoje.getFullYear());
+                  const isSel=calSelDay===dateStr;
+                  const hasItems=items.length>0;
                   return(
-                    <div key={ci} style={{minHeight:64,background:isToday?`${C.accent}15`:C.bg,border:`1px solid ${isToday?C.accent:C.border}`,
-                      borderRadius:8,padding:"6px",cursor:items.length>0?"pointer":"default",transition:"all .2s"}}
-                      onMouseEnter={e=>items.length>0&&(e.currentTarget.style.borderColor=C.accent)}
-                      onMouseLeave={e=>!isToday&&(e.currentTarget.style.borderColor=C.border)}>
-                      <div style={{fontFamily:"'Inter',sans-serif",fontWeight:isToday?800:500,fontSize:13,
-                        color:isToday?C.accent:C.text,marginBottom:4}}>{day}</div>
+                    <div key={ci}
+                      onClick={()=>{ setCalSelDay(isSel?null:dateStr); if(hasItems){setView("lista");}else{setCalSelDay(dateStr);openNew();} }}
+                      style={{minHeight:64,background:isSel?`${C.accent}25`:isToday?`${C.accent}15`:C.bg,
+                        border:`1px solid ${isSel?C.accent:isToday?C.accent:hasItems?C.accent+"40":C.border}`,
+                        borderRadius:8,padding:"6px",cursor:"pointer",transition:"all .2s"}}
+                      onMouseEnter={e=>e.currentTarget.style.background=`${C.accent}20`}
+                      onMouseLeave={e=>e.currentTarget.style.background=isSel?`${C.accent}25`:isToday?`${C.accent}15`:C.bg}>
+                      <div style={{fontFamily:"'Inter',sans-serif",fontWeight:isToday||isSel?800:500,fontSize:13,
+                        color:isToday||isSel?C.accent:C.text,marginBottom:4}}>{day}</div>
                       {items.slice(0,3).map(a=>{
                         const tp=TIPO_COLORS[a.tipo]||{color:C.accent};
                         return(<div key={a.id} style={{fontSize:9,fontWeight:600,color:tp.color,background:`${tp.color}18`,
@@ -4504,7 +4545,7 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
                           {a.hora} {a.nome.split(" ")[0]}
                         </div>);
                       })}
-                      {items.length>3&&<div style={{fontSize:9,color:C.muted,fontWeight:600}}>+{items.length-3} mais</div>}
+                      {items.length>3&&<div style={{fontSize:9,color:C.muted,fontWeight:600}}>+{items.length-3}</div>}
                     </div>
                   );
                 })}
@@ -4551,8 +4592,8 @@ const AuditoriaPage = ({ auditLogs, user }) => {
     try {
       const xlsxLib = await loadXLSX();
       const rows = filtered.map(l=>({
-        "Data/Hora": l.dataHora, "Usuário": l.usuario, "Perfil": l.perfil,
-        "Tipo": l.tipo, "Ação": l.acao, "Detalhes": l.detalhes||"",
+        "Data/Hora": l.dataHora, "Usuario": l.usuario, "Perfil": l.perfil,
+        "Tipo": l.tipo, "Acao": l.acao, "Detalhes": l.detalhes||"",
       }));
       const ws = xlsxLib.utils.json_to_sheet(rows);
       ws["!cols"] = [{wch:20},{wch:16},{wch:14},{wch:12},{wch:50},{wch:40}];
@@ -4567,24 +4608,24 @@ const AuditoriaPage = ({ auditLogs, user }) => {
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20,flexWrap:"wrap"}}>
         <div>
           <div style={{fontFamily:"'Inter',sans-serif",fontSize:20,fontWeight:700}}>🔍 Auditoria do Sistema</div>
-          <div style={{fontSize:13,color:C.muted,marginTop:2}}>Registro completo de todas as ações realizadas</div>
+          <div style={{fontSize:13,color:C.muted,marginTop:2}}>Registro completo de todas as acoes realizadas</div>
         </div>
         <div style={{flex:1}}/>
         <button className="abt" style={{background:`${C.gold}15`,borderColor:C.gold,color:C.gold,padding:"8px 16px"}}
           onClick={exportAudit}>⬇ Exportar Excel</button>
         <button className="abt" style={{background:`${C.red}15`,borderColor:C.red,color:C.red,padding:"8px 16px"}}
-          onClick={()=>{ if(window.confirm("Limpar histórico de auditoria?")){ localStorage.removeItem("elevamente_audit_v1"); window.location.reload(); }}}>
+          onClick={()=>{ if(window.confirm("Limpar historico de auditoria?")){ localStorage.removeItem("elevamente_audit_v1"); window.location.reload(); }}}>
           🗑 Limpar
         </button>
       </div>
 
-      {/* Stats rápidos */}
+      {/* Stats rapidos */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}} className="men-kpi-grid">
         {[
-          {l:"Total de ações",  v:auditLogs.length,                              c:C.accent},
-          {l:"Usuários ativos", v:new Set(auditLogs.map(l=>l.usuario)).size,      c:C.green},
-          {l:"Criações",        v:auditLogs.filter(l=>l.tipo==="Criou").length,    c:C.accent2},
-          {l:"Modificações",    v:auditLogs.filter(l=>l.tipo==="Editou").length,   c:C.gold},
+          {l:"Total de acoes",  v:auditLogs.length,                              c:C.accent},
+          {l:"Usuarios ativos", v:new Set(auditLogs.map(l=>l.usuario)).size,      c:C.green},
+          {l:"Criacoes",        v:auditLogs.filter(l=>l.tipo==="Criou").length,    c:C.accent2},
+          {l:"Modificacoes",    v:auditLogs.filter(l=>l.tipo==="Editou").length,   c:C.gold},
         ].map(x=>(
           <div key={x.l} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 18px",borderTop:`2px solid ${x.c}40`}}>
             <div style={{fontFamily:"'Inter',sans-serif",fontSize:24,fontWeight:800,color:x.c,fontVariantNumeric:"tabular-nums"}}>{x.v}</div>
@@ -4597,10 +4638,10 @@ const AuditoriaPage = ({ auditLogs, user }) => {
       <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
         <input style={{background:C.card,border:`1px solid ${C.border}`,color:C.text,padding:"9px 14px",
           borderRadius:10,fontSize:13,fontFamily:"'Inter',sans-serif",flex:1,minWidth:200,outline:"none"}}
-          placeholder="🔍 Buscar ação ou usuário..." value={filtSearch} onChange={e=>setFiltSearch(e.target.value)}/>
+          placeholder="🔍 Buscar acao ou usuario..." value={filtSearch} onChange={e=>setFiltSearch(e.target.value)}/>
         <select style={{background:C.card,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:10,fontSize:13,fontFamily:"'Inter',sans-serif",outline:"none"}}
           value={filtUser} onChange={e=>setFiltUser(e.target.value)}>
-          <option value="todos">Todos usuários</option>
+          <option value="todos">Todos usuarios</option>
           {usuarios.map(u=><option key={u} value={u}>{u}</option>)}
         </select>
         <select style={{background:C.card,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:10,fontSize:13,fontFamily:"'Inter',sans-serif",outline:"none"}}
@@ -4617,8 +4658,8 @@ const AuditoriaPage = ({ auditLogs, user }) => {
           <table>
             <thead>
               <tr>
-                <th>Data/Hora</th><th>Usuário</th><th>Perfil</th>
-                <th>Tipo</th><th>Ação</th><th>Detalhes</th>
+                <th>Data/Hora</th><th>Usuario</th><th>Perfil</th>
+                <th>Tipo</th><th>Acao</th><th>Detalhes</th>
               </tr>
             </thead>
             <tbody>
@@ -4641,7 +4682,7 @@ const AuditoriaPage = ({ auditLogs, user }) => {
                       </span>
                     </td>
                     <td style={{fontSize:13,maxWidth:280}}>{l.acao}</td>
-                    <td style={{fontSize:12,color:C.muted,maxWidth:200}}>{l.detalhes||"–"}</td>
+                    <td style={{fontSize:12,color:C.muted,maxWidth:200}}>{l.detalhes||"-"}</td>
                   </tr>
                 );
               })}
@@ -4653,8 +4694,8 @@ const AuditoriaPage = ({ auditLogs, user }) => {
       {auditLogs.length===0&&(
         <div style={{textAlign:"center",padding:"60px 0",opacity:.5}}>
           <div style={{fontSize:48,marginBottom:12}}>📋</div>
-          <div style={{fontFamily:"'Inter',sans-serif",fontSize:16,fontWeight:700}}>Nenhuma ação registrada ainda</div>
-          <div style={{color:C.muted,fontSize:13,marginTop:6}}>As ações aparecerão aqui conforme o sistema for utilizado</div>
+          <div style={{fontFamily:"'Inter',sans-serif",fontSize:16,fontWeight:700}}>Nenhuma acao registrada ainda</div>
+          <div style={{color:C.muted,fontSize:13,marginTop:6}}>As acoes aparecerao aqui conforme o sistema for utilizado</div>
         </div>
       )}
     </div>
@@ -4665,7 +4706,7 @@ const ComingSoon = ({ title }) => (
   <div style={{ display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"60vh",gap:16,opacity:.6 }}>
     <div style={{ fontSize:56 }}>🚧</div>
     <div style={{ fontFamily:"'Inter',sans-serif",fontSize:22,fontWeight:700 }}>{title}</div>
-    <div style={{ color:C.muted,fontSize:14 }}>Será implementado na próxima fase</div>
+    <div style={{ color:C.muted,fontSize:14 }}>Sera implementado na proxima fase</div>
   </div>
 );
 
@@ -4712,11 +4753,11 @@ const LoginPage = ({ onLogin }) => {
           <div style={{position:"absolute",top:0,left:0,right:0,height:2,background:"linear-gradient(90deg,#00D4FF,#0091FF,#8B5CF6)"}}/>
 
           <div style={{fontFamily:"'Inter',sans-serif",fontSize:18,fontWeight:700,marginBottom:6,color:"#E2E8F0"}}>Entrar no sistema</div>
-          <div style={{fontSize:13,color:"#64748B",marginBottom:24}}>Acesso restrito — colaboradores autorizados</div>
+          <div style={{fontSize:13,color:"#64748B",marginBottom:24}}>Acesso restrito - colaboradores autorizados</div>
 
           {/* Login */}
           <div style={{marginBottom:14}}>
-            <div style={{fontSize:12,color:"#64748B",marginBottom:6,fontWeight:500}}>Usuário</div>
+            <div style={{fontSize:12,color:"#64748B",marginBottom:6,fontWeight:500}}>Usuario</div>
             <input style={inputStyle} placeholder="ex: gestor, rh, psicologia..." value={login}
               onChange={e=>setLogin(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleSubmit()}
               onFocus={e=>e.target.style.borderColor="#00D4FF"} onBlur={e=>e.target.style.borderColor="#1E2D42"}/>
@@ -4740,7 +4781,7 @@ const LoginPage = ({ onLogin }) => {
           {erro && <div style={{background:"#EF444418",border:"1px solid #EF444430",borderRadius:8,padding:"10px 14px",
             fontSize:13,color:"#EF4444",marginBottom:16}}>⚠️ {erro}</div>}
 
-          {/* Botão */}
+          {/* Botao */}
           <button onClick={handleSubmit} disabled={loading||!login||!senha}
             style={{width:"100%",padding:"13px",borderRadius:11,border:"none",cursor:loading||!login||!senha?"not-allowed":"pointer",
               background:login&&senha?"linear-gradient(135deg,#00D4FF,#0091FF)":"#1E2D42",
@@ -4749,7 +4790,7 @@ const LoginPage = ({ onLogin }) => {
             {loading?"Verificando...":"Entrar →"}
           </button>
 
-          {/* Perfis disponíveis */}
+          {/* Perfis disponiveis */}
           <div style={{marginTop:24,padding:"14px 16px",background:"#0A0F1E",borderRadius:10,border:"1px solid #1E2D42"}}>
             <div style={{fontSize:11,fontWeight:700,color:"#64748B",textTransform:"uppercase",letterSpacing:1,marginBottom:10}}>Perfis de acesso</div>
             <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
@@ -4874,8 +4915,8 @@ export default function App() {
   const today = new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"2-digit",month:"long"});
   const sections = [...new Set(NAV.map(n=>n.section))];
   const titles = { dashboard:"Dashboard",operadores:"Operadores",ficha:"Ficha do Operador",
-    mentoria:"Mentoria",agenda:"Agenda",tratativas:"Tratativas",relatorios:"Relatórios",
-    auditoria:"Auditoria do Sistema",parametros:"Parâmetros Financeiros",base:"Base de Dados" };
+    mentoria:"Mentoria",agenda:"Agenda",tratativas:"Tratativas",relatorios:"Relatorios",
+    auditoria:"Auditoria do Sistema",parametros:"Parametros Financeiros",base:"Base de Dados" };
   const handleUpload = async (file) => {
     setLoading(true);
     try {
@@ -4900,7 +4941,7 @@ export default function App() {
           sheetSummary: result.sheetSummary,
           savedAt:   new Date().toLocaleString("pt-BR"),
         }));
-      } catch(e) { console.warn("localStorage cheio, dados não persistidos:", e); }
+      } catch(e) { console.warn("localStorage cheio, dados nao persistidos:", e); }
       // ─────────────────────────────────────────────────────────────────────────
       audit("Upload de base Excel: " + file.name, "Upload");
       setActive("dashboard");
@@ -4970,7 +5011,7 @@ export default function App() {
                 </div>
                 <div style={{overflow:"hidden",flex:1}}>
                   <div style={{fontSize:12,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{user?.nome}</div>
-                  <div style={{fontSize:10,color:C.muted}}>{(PERFIL_LABELS[user?.perfil]||{label:"–"}).label}{user?.garagem!=="Todas"?` · ${user.garagem}`:""}</div>
+                  <div style={{fontSize:10,color:C.muted}}>{(PERFIL_LABELS[user?.perfil]||{label:"-"}).label}{user?.garagem!=="Todas"?` · ${user.garagem}`:""}</div>
                 </div>
               </div>
               <button onClick={()=>{audit("Logout do sistema","Login");setUser(null);setActive("dashboard");}}
@@ -5166,7 +5207,21 @@ export default function App() {
           {active==="dashboard"   && <DashboardPage data={filteredOps} isReal={isReal} onNav={setActive} agenda={filteredAgenda} tratativas={filteredTrat}/>}
           {active==="operadores"  && <OperadoresPage operators={ops} onVerFicha={(op)=>{ setSelectedOp(op); setActive("ficha"); }}/>}
           {active==="ficha"       && <FichaPage op={selectedOp} onBack={()=>setActive("operadores")} globalCustos={custos} onSaveCustos={setCust}/>}
-          {active==="mentoria"    && <MentoriaPage operators={ops} sessions={sessions} onSave={s=>{setSess(prev=>[...prev,s]);audit("Nova sessão de mentoria: "+s.nome+" ("+s.re+")", "Criou");}}/>}
+          {active==="mentoria"    && <MentoriaPage operators={ops} sessions={sessions} onSave={s=>{
+  setSess(prev=>[...prev,s]);
+  audit("Nova sessao de mentoria: "+s.nome+" ("+s.re+")", "Criou");
+  if(s.setor && s.setor.trim() !== "" && s.setor !== "–"){
+    const t={
+      id:Date.now()+1, re:s.re, nome:s.nome,
+      area:s.setor, subarea:s.subsetor||"",
+      descricao:s.relato||"Encaminhado via mentoria em "+s.data,
+      data:s.data, prazo:"", prioridade:"normal",
+      status:"pendente", retorno:"", sessionId:s.id,
+    };
+    setTrat(prev=>[...prev,t]);
+    audit("Tratativa criada via mentoria: "+s.setor+" - "+s.re, "Criou");
+  }
+}}/>}
           {active==="agenda"      && <AgendaPage agenda={filteredAgenda} onUpdate={setAgd} onAdd={a=>setAgd(prev=>[...prev,a])} operators={ops}/>}
           {active==="tratativas"  && <TratativasPage tratativas={filteredTrat} onUpdate={setTrat} onAdd={t=>{setTrat(prev=>[...prev,t]);audit("Nova tratativa: "+t.area+" - "+t.re, "Criou");}} operators={ops} sessions={sessions}/>}
           {active==="relatorios"  && <RelatoriosPage data={filteredOps} sessions={sessions} tratativas={filteredTrat} custos={custos}/>}
@@ -5191,7 +5246,7 @@ export default function App() {
             </div>
             <span style={{fontWeight:600,color:C.text}}>{user.nome}</span>
             <span style={{color:C.muted}}>·</span>
-            <span style={{color:C.muted}}>{(PERFIL_LABELS[user.perfil]||{label:"Usuário"}).label}</span>
+            <span style={{color:C.muted}}>{(PERFIL_LABELS[user.perfil]||{label:"Usuario"}).label}</span>
             <div style={{flex:1}}/>
             <span style={{color:C.muted}}>
               {new Date().toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"})}
