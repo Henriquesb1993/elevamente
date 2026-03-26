@@ -4491,7 +4491,6 @@ export default function App() {
             </div>
           </div>
         </nav>
-        </nav>
 
         <main className={`main ${col?"col":""}`} style={{position:"relative"}}>
           <div className="topbar">
