@@ -137,6 +137,24 @@ function processExcel(workbook) {
   const formulario  = get("FORMULARIO") || get("FORMULÁRIO") || get("MENTORIA");
 
   // ── Build operator map from QUADRO_FUNC ─────────────────────────────────
+  // ── Set of REs marked ELEVAMENTE = SIM ──────────────────────────────────
+  // If column doesn't exist in any row, assumes ALL should be included (backwards compat)
+  const elevaSet = new Set();
+  let hasElevaCol = false;
+  quadro.forEach(row => {
+    const elCol = findCol(row,"ELEVAMENTE","ELEVA","PROGRAMA");
+    if (elCol) hasElevaCol = true;
+  });
+  if (hasElevaCol) {
+    quadro.forEach(row => {
+      const reCol = findCol(row,"NOREG","RE","REGISTRO","CHAPA","MATRICULA");
+      const elCol = findCol(row,"ELEVAMENTE","ELEVA","PROGRAMA");
+      const re    = reCol ? String(row[reCol]).trim() : null;
+      const val   = elCol ? String(row[elCol]).trim().toUpperCase() : "";
+      if (re && val === "SIM") elevaSet.add(re);
+    });
+  }
+
   const opMap = {};
   quadro.forEach(row => {
     const reCol  = findCol(row,"NOREG","RE","REGISTRO","CHAPA","MATRICULA");
@@ -146,6 +164,8 @@ function processExcel(workbook) {
     const adCol  = findCol(row,"ADMISSAO","ADMISSÃO","DATA ADM","ENTRADA");
     const re = reCol ? String(row[reCol]).trim() : null;
     if (!re) return;
+    // Se a coluna ELEVAMENTE existe, só inclui quem tem SIM
+    if (hasElevaCol && !elevaSet.has(re)) return;
     opMap[re] = {
       re,
       nome:     nmCol ? String(row[nmCol]).trim() : "–",
@@ -239,12 +259,18 @@ function processExcel(workbook) {
   });
 
   // ── Build final operator list ────────────────────────────────────────────
-  const allREs = new Set([
-    ...Object.keys(opMap),
-    ...Object.keys(evCount),
-    ...Object.keys(multasCount),
-    ...Object.keys(acidCount),
-  ]);
+  // Se a coluna ELEVAMENTE existe, só considera REs que estão no programa
+  // Se não existe, considera todos os REs encontrados nos eventos (comportamento original)
+  const allREs = new Set(
+    hasElevaCol
+      ? [...elevaSet] // só quem tem ELEVAMENTE=SIM
+      : [
+          ...Object.keys(opMap),
+          ...Object.keys(evCount),
+          ...Object.keys(multasCount),
+          ...Object.keys(acidCount),
+        ]
+  );
 
   const operators = [...allREs].map(re => {
     const base   = opMap[re] || { re, nome:"–", funcao:"–", garagem:"–", admissao:"–" };
@@ -1218,7 +1244,7 @@ const BasePage = ({ fileName, fileSize, sheetSummary, onUpload, onDelete, isReal
             { aba:"QUERY_PRONTUARIO", desc:"Histórico de eventos (faltas, multas, suspensões...)", campos:"NoREG, CHAPA, NOME, DATA, EV, HISTORICO" },
             { aba:"QUERY_MULTAS",     desc:"Infrações de trânsito com valor e enquadramento",       campos:"Data infração, N.REG, Linha, Descrição, Valor" },
             { aba:"ACIDENTES",        desc:"Acidentes — filtrado por parecer 'responsável'",        campos:"Data, RE, Descrição, Parecer" },
-            { aba:"QUADRO_FUNC",      desc:"Dados cadastrais dos funcionários",                     campos:"RE, Nome, Função, Garagem, Admissão" },
+            { aba:"QUADRO_FUNC",      desc:"Dados cadastrais dos funcionários — inclua coluna ELEVAMENTE (SIM/NÃO) para filtrar quem está no programa",     campos:"RE, Nome, Função, Garagem, Admissão, ELEVAMENTE" },
             { aba:"LISTA PRESENÇA",   desc:"Presenças em mentorias e cursos Elevamente",            campos:"Data, RE, Nome, Evento, Presença" },
             { aba:"FORM. MENTORIA",   desc:"Respostas do formulário de mentoria",                   campos:"Data, RE, Acompanhante, Causa, Comprometimento" },
           ].map(x=>(
