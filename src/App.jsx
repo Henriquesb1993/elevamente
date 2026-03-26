@@ -4680,7 +4680,7 @@ const LoginPage = ({ onLogin }) => {
   const handleSubmit = async () => {
     setErro(""); setLoading(true);
     await new Promise(r=>setTimeout(r,600));
-    const user = USERS.find(u=>u.login===login.trim()&&u.senha===senha);
+    const user = USERS.find(u=>u.login.toUpperCase()===login.trim().toUpperCase()&&u.senha===senha.trim());
     if (user) onLogin(user);
     else setErro("Login ou senha incorretos.");
     setLoading(false);
