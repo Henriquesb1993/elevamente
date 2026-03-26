@@ -4,25 +4,66 @@ import { useState, useRef, useCallback, useEffect } from "react";
 
 // ─── USERS / PERFIS ───────────────────────────────────────────────────────────
 const USERS = [
-  { id:1, login:"gestor",     senha:"eleva@2025", nome:"Gestora Geral",       perfil:"gestor",     garagem:"Todas",  avatar:"GG", acesso:["dashboard","operadores","ficha","mentoria","agenda","tratativas","relatorios","parametros","base"] },
-  { id:2, login:"rh",         senha:"rh@2025",    nome:"Equipe de RH",         perfil:"rh",         garagem:"Todas",  avatar:"RH", acesso:["operadores","ficha","mentoria","agenda","tratativas","relatorios"] },
-  { id:3, login:"psicologia", senha:"psi@2025",   nome:"Psicologia",           perfil:"psicologia", garagem:"Todas",  avatar:"PS", acesso:["operadores","ficha","mentoria","agenda","tratativas"] },
-  { id:4, login:"dp",         senha:"dp@2025",    nome:"Departamento Pessoal", perfil:"dp",         garagem:"Todas",  avatar:"DP", acesso:["operadores","ficha","tratativas","relatorios"] },
-  { id:5, login:"ambulatorio",senha:"amb@2025",   nome:"Ambulatório",          perfil:"ambulatorio",garagem:"Todas",  avatar:"AM", acesso:["operadores","ficha","tratativas"] },
-  { id:6, login:"g1",         senha:"g1@2025",    nome:"Gestor Garagem G1",    perfil:"gestor_gar", garagem:"G1",     avatar:"G1", acesso:["dashboard","operadores","ficha","mentoria","agenda"] },
-  { id:7, login:"g2",         senha:"g2@2025",    nome:"Gestor Garagem G2",    perfil:"gestor_gar", garagem:"G2",     avatar:"G2", acesso:["dashboard","operadores","ficha","mentoria","agenda"] },
+  { id:1,  login:"HENRIQUE123",    senha:"HENRIQUE123",    nome:"Henrique",             perfil:"admin",      garagem:"Todas", avatar:"HE", acesso:["dashboard","operadores","ficha","mentoria","agenda","tratativas","relatorios","parametros","base","auditoria"] },
+  { id:2,  login:"JURIDICO",       senha:"JUR123@",        nome:"Jurídico",             perfil:"juridico",   garagem:"Todas", avatar:"JU", acesso:["operadores","ficha","tratativas","relatorios"] },
+  { id:3,  login:"RH",             senha:"RH2026@",        nome:"Equipe de RH",         perfil:"rh",         garagem:"Todas", avatar:"RH", acesso:["operadores","ficha","mentoria","agenda","tratativas","relatorios"] },
+  { id:4,  login:"MENTOR",         senha:"MENTOR@2026",    nome:"Mentor",               perfil:"mentor",     garagem:"Todas", avatar:"MT", acesso:["dashboard","operadores","ficha","mentoria","agenda","tratativas"] },
+  { id:5,  login:"ALVARO",         senha:"ALVARO123",      nome:"Álvaro",               perfil:"gestor_gar", garagem:"Todas", avatar:"AL", acesso:["dashboard","operadores","ficha","mentoria","agenda","tratativas","relatorios"] },
+  { id:6,  login:"REGINALDO",      senha:"REGINALDO123@",  nome:"Reginaldo",            perfil:"gestor_gar", garagem:"Todas", avatar:"RE", acesso:["dashboard","operadores","ficha","mentoria","agenda","tratativas","relatorios"] },
+  { id:7,  login:"MARCOS",         senha:"MARCOSELOI123",  nome:"Marcos Elói",          perfil:"gestor_gar", garagem:"Todas", avatar:"ME", acesso:["dashboard","operadores","ficha","mentoria","agenda","tratativas","relatorios"] },
 ];
 
 const PERFIL_LABELS = {
-  gestor:     { label:"Gestor Geral",       color:"#00D4FF", bg:"#00D4FF18" },
+  admin:      { label:"Administrador",      color:"#00D4FF", bg:"#00D4FF18" },
+  juridico:   { label:"Jurídico",           color:"#F59E0B", bg:"#F59E0B18" },
   rh:         { label:"RH",                 color:"#0091FF", bg:"#0091FF18" },
-  psicologia: { label:"Psicologia",         color:"#8B5CF6", bg:"#8B5CF618" },
-  dp:         { label:"Dep. Pessoal",       color:"#F59E0B", bg:"#F59E0B18" },
-  ambulatorio:{ label:"Ambulatório",        color:"#10B981", bg:"#10B98118" },
-  gestor_gar: { label:"Gestor de Garagem",  color:"#F97316", bg:"#F9731618" },
+  mentor:     { label:"Mentor",             color:"#10B981", bg:"#10B98118" },
+  gestor_gar: { label:"Gestor",             color:"#F97316", bg:"#F9731618" },
 };
 
-// ─── STORAGE HELPERS (persiste entre sessões via window.storage do Artifact) ──
+// ─── AUDIT LOG ────────────────────────────────────────────────────────────────
+const AUDIT_KEY = "elevamente_audit_v1";
+function addAuditLog(user, acao, tipo, detalhes="") {
+  try {
+    const logs = JSON.parse(localStorage.getItem(AUDIT_KEY)||"[]");
+    logs.unshift({
+      id: Date.now(),
+      usuario: user?.nome || "Sistema",
+      perfil:  user?.perfil || "–",
+      acao,
+      tipo,      // "Criou" | "Editou" | "Excluiu" | "Acessou" | "Upload"
+      detalhes,
+      dataHora: new Date().toLocaleString("pt-BR"),
+    });
+    localStorage.setItem(AUDIT_KEY, JSON.stringify(logs.slice(0,500)));
+  } catch(e) { /* silent */ }
+}
+function getAuditLogs() {
+  try { return JSON.parse(localStorage.getItem(AUDIT_KEY)||"[]"); } catch { return []; }
+}
+
+// ─── THEME SYSTEM ─────────────────────────────────────────────────────────────
+const THEMES = {
+  dark: {
+    bg:"#0A0F1E", surface:"#111827", card:"#151E2E", border:"#1E2D42",
+    accent:"#00D4FF", accent2:"#0091FF", gold:"#F59E0B", green:"#10B981",
+    red:"#EF4444", orange:"#F97316", purple:"#8B5CF6", text:"#E2E8F0", muted:"#64748B",
+    label:"🌙 Dark",
+  },
+  normal: {
+    bg:"#0F172A", surface:"#1E293B", card:"#1E2D42", border:"#334155",
+    accent:"#38BDF8", accent2:"#0EA5E9", gold:"#FBBF24", green:"#34D399",
+    red:"#F87171", orange:"#FB923C", purple:"#A78BFA", text:"#F1F5F9", muted:"#94A3B8",
+    label:"🌤 Normal",
+  },
+  light: {
+    bg:"#F8FAFC", surface:"#FFFFFF", card:"#FFFFFF", border:"#E2E8F0",
+    accent:"#0284C7", accent2:"#0369A1", gold:"#D97706", green:"#059669",
+    red:"#DC2626", orange:"#EA580C", purple:"#7C3AED", text:"#0F172A", muted:"#64748B",
+    label:"🤍 Light",
+  },
+};
+
 const STORAGE_KEY = "elevamente_v1";
 async function saveState(state) {
   try { await window.storage?.set(STORAGE_KEY, JSON.stringify(state)); } catch(e){ /* silent */ }
@@ -71,15 +112,13 @@ function loadJsPDF() {
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  AreaChart, Area, ReferenceLine, LabelList,
+  AreaChart, Area, ReferenceLine, LabelList, Legend,
 } from "recharts";
 
-// ─── PALETTE ────────────────────────────────────────────────────────────────
-const C = {
-  bg:"#0A0F1E", surface:"#111827", card:"#151E2E", border:"#1E2D42",
-  accent:"#00D4FF", accent2:"#0091FF", gold:"#F59E0B", green:"#10B981",
-  red:"#EF4444", orange:"#F97316", purple:"#8B5CF6", text:"#E2E8F0", muted:"#64748B",
-};
+// ─── PALETTE (dynamic — updated by theme) ────────────────────────────────────
+let _themeName = "dark";
+try { _themeName = localStorage.getItem("elevamente_theme") || "dark"; } catch {}
+let C = { ...THEMES[_themeName] || THEMES.dark };
 const PIE_COLORS = [C.accent, C.accent2, C.purple, C.gold, C.muted];
 
 // ─── EVENT MAP ──────────────────────────────────────────────────────────────
@@ -394,9 +433,11 @@ const MOCK = {
 
 // ─── STYLES ──────────────────────────────────────────────────────────────────
 const styles = `
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:${C.bg};color:${C.text};font-family:'DM Sans',sans-serif;overflow-x:hidden}
+body{background:${C.bg};color:${C.text};font-family:'Inter',sans-serif;font-size:16px;line-height:1.5;overflow-x:hidden;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:'Inter',sans-serif;font-weight:700}
+h1{font-size:28px}h2{font-size:24px}h3{font-size:20px}
 .app{display:flex;min-height:100vh}
 .sidebar{width:240px;min-height:100vh;background:${C.surface};border-right:1px solid ${C.border};
   display:flex;flex-direction:column;position:fixed;left:0;top:0;z-index:100;transition:width .3s}
@@ -405,8 +446,8 @@ body{background:${C.bg};color:${C.text};font-family:'DM Sans',sans-serif;overflo
 .li{width:36px;height:36px;border-radius:10px;flex-shrink:0;
   background:linear-gradient(135deg,${C.accent},${C.accent2});
   display:flex;align-items:center;justify-content:center;
-  font-family:'Syne',sans-serif;font-weight:800;font-size:18px;color:#000}
-.lt{font-family:'Syne',sans-serif;font-weight:700;font-size:15px;color:${C.text};white-space:nowrap}
+  font-family:'Inter',sans-serif;font-weight:800;font-size:18px;color:#000}
+.lt{font-family:'Inter',sans-serif;font-weight:700;font-size:15px;color:${C.text};white-space:nowrap}
 .ls{font-size:10px;color:${C.muted}}
 .nav{padding:12px 8px;flex:1;display:flex;flex-direction:column;gap:2px}
 .ni{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;cursor:pointer;
@@ -420,7 +461,7 @@ body{background:${C.bg};color:${C.text};font-family:'DM Sans',sans-serif;overflo
 .uc{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:10px;cursor:pointer}
 .av{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,${C.purple},${C.accent2});
   display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0}
-.main{margin-left:240px;flex:1;padding:28px 32px;transition:margin-left .3s}
+.main{margin-left:240px;flex:1;padding:28px 32px 60px;transition:margin-left .3s}
 .main.col{margin-left:64px}
 .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:28px;flex-wrap:wrap;gap:12px}
 .tbl{display:flex;align-items:center;gap:16px}
@@ -428,7 +469,7 @@ body{background:${C.bg};color:${C.text};font-family:'DM Sans',sans-serif;overflo
 .tog{background:${C.card};border:1px solid ${C.border};color:${C.muted};width:36px;height:36px;
   border-radius:8px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center}
 .tog:hover{color:${C.accent}}
-.pt{font-family:'Syne',sans-serif;font-size:22px;font-weight:700}
+.pt{font-family:'Inter',sans-serif;font-size:22px;font-weight:700}
 .ps{font-size:13px;color:${C.muted};margin-top:2px}
 .dchip{background:${C.card};border:1px solid ${C.border};border-radius:8px;padding:6px 14px;font-size:13px;color:${C.muted};white-space:nowrap}
 .bb{position:relative;background:${C.card};border:1px solid ${C.border};color:${C.muted};
@@ -444,7 +485,7 @@ body{background:${C.bg};color:${C.text};font-family:'DM Sans',sans-serif;overflo
 .kc{background:${C.card};border:1px solid ${C.border};border-radius:14px;padding:16px;position:relative;overflow:hidden;cursor:pointer;transition:all .2s}
 .kc:hover{border-color:${C.accent}40;transform:translateY(-2px)}
 .ki{font-size:22px;margin-bottom:10px}
-.kv{font-family:'Syne',sans-serif;font-size:28px;font-weight:800;line-height:1;margin-bottom:4px}
+.kv{font-family:'Inter',sans-serif;font-size:28px;font-weight:800;line-height:1;margin-bottom:4px}
 .kl{font-size:11.5px;color:${C.muted};font-weight:500}
 .kd{font-size:11px;margin-top:6px;display:flex;align-items:center;gap:4px}
 .kc .gl{position:absolute;bottom:-20px;right:-20px;width:80px;height:80px;border-radius:50%;opacity:.08}
@@ -467,10 +508,10 @@ tr:last-child td{border-bottom:none}
 .ctt .dot{width:8px;height:8px;border-radius:50%}
 /* operadores */
 .search-bar{display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;align-items:center}
-.search-input{flex:1;min-width:200px;background:${C.card};border:1px solid ${C.border};color:${C.text};padding:10px 16px;border-radius:10px;font-size:13px;font-family:'DM Sans',sans-serif;outline:none}
+.search-input{flex:1;min-width:200px;background:${C.card};border:1px solid ${C.border};color:${C.text};padding:10px 16px;border-radius:10px;font-size:13px;font-family:'Inter',sans-serif;outline:none}
 .search-input:focus{border-color:${C.accent}50}
 .search-input::placeholder{color:${C.muted}}
-.filter-sel{background:${C.card};border:1px solid ${C.border};color:${C.text};padding:10px 14px;border-radius:10px;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;cursor:pointer}
+.filter-sel{background:${C.card};border:1px solid ${C.border};color:${C.text};padding:10px 14px;border-radius:10px;font-size:13px;font-family:'Inter',sans-serif;outline:none;cursor:pointer}
 .filter-sel option{background:${C.surface}}
 .op-tabs{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap}
 .op-tab{padding:8px 16px;border-radius:20px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid ${C.border};background:transparent;color:${C.muted};transition:all .2s;white-space:nowrap}
@@ -478,13 +519,13 @@ tr:last-child td{border-bottom:none}
 .op-tab-cnt{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;font-size:10px;font-weight:700;margin-left:6px}
 .op-card{background:${C.card};border:1px solid ${C.border};border-radius:14px;padding:14px 18px;display:flex;align-items:center;gap:14px;transition:all .2s;cursor:pointer;margin-bottom:10px}
 .op-card:hover{border-color:${C.accent}30;background:${C.surface}}
-.op-avatar{width:42px;height:42px;border-radius:12px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;font-family:'Syne',sans-serif}
+.op-avatar{width:42px;height:42px;border-radius:12px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;font-family:'Inter',sans-serif}
 .op-info{flex:1;min-width:0}
 .op-nome{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .op-sub{font-size:12px;color:${C.muted};margin-top:2px}
 .op-stats{display:flex;gap:14px;align-items:center}
 .op-stat{text-align:center}
-.op-stat-v{font-family:'Syne',sans-serif;font-size:16px;font-weight:800}
+.op-stat-v{font-family:'Inter',sans-serif;font-size:16px;font-weight:800}
 .op-stat-l{font-size:10px;color:${C.muted}}
 .op-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 /* excel upload */
@@ -498,7 +539,7 @@ tr:last-child td{border-bottom:none}
 .del-btn:hover{background:${C.red}40}
 .base-info{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:20px}
 .bi-card{background:${C.card};border:1px solid ${C.border};border-radius:12px;padding:14px}
-.bi-val{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:${C.accent}}
+.bi-val{font-family:'Inter',sans-serif;font-size:20px;font-weight:800;color:${C.accent}}
 .bi-lbl{font-size:11px;color:${C.muted};margin-top:3px}
 .aba-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
 .aba-chip{display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:600;background:${C.border}50;color:${C.muted};border:1px solid transparent;cursor:pointer}
@@ -514,7 +555,7 @@ tr:last-child td{border-bottom:none}
 .d4{animation-delay:.18s}.d5{animation-delay:.24s}.d6{animation-delay:.30s}
 .rw{display:flex;align-items:center;justify-content:center;position:relative}
 .rc{position:absolute;text-align:center}
-.rp{font-family:'Syne',sans-serif;font-size:28px;font-weight:800;color:${C.green}}
+.rp{font-family:'Inter',sans-serif;font-size:28px;font-weight:800;color:${C.green}}
 .rl{font-size:10px;color:${C.muted}}
 @media(max-width:1280px){.gkpi{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:900px){.g2{grid-template-columns:1fr}}
@@ -566,12 +607,12 @@ tr:last-child td{border-bottom:none}
 .ficha-header::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;
   background:linear-gradient(90deg,${C.accent},${C.accent2},${C.purple})}
 .ficha-avatar{width:64px;height:64px;border-radius:16px;display:flex;align-items:center;
-  justify-content:center;font-size:22px;font-weight:800;font-family:'Syne',sans-serif;flex-shrink:0}
-.ficha-nome{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;margin-bottom:4px}
+  justify-content:center;font-size:22px;font-weight:800;font-family:'Inter',sans-serif;flex-shrink:0}
+.ficha-nome{font-family:'Inter',sans-serif;font-size:22px;font-weight:800;margin-bottom:4px}
 .ficha-sub{font-size:13px;color:${C.muted};display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .ficha-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-top:20px;padding-top:20px;border-top:1px solid ${C.border}}
 .fg-item{text-align:center}
-.fg-val{font-family:'Syne',sans-serif;font-size:20px;font-weight:800}
+.fg-val{font-family:'Inter',sans-serif;font-size:20px;font-weight:800}
 .fg-lbl{font-size:11px;color:${C.muted};margin-top:2px}
 
 .ficha-tabs{display:flex;gap:4px;margin-bottom:20px;background:${C.surface};border-radius:12px;padding:5px}
@@ -625,7 +666,7 @@ tr:last-child td{border-bottom:none}
 .onboard-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,${C.accent},${C.accent2},${C.purple})}
 .onboard-step{display:flex;align-items:center;gap:10px;padding:6px 0}
 .onboard-num{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;
-  font-size:10px;font-weight:800;font-family:'Syne',sans-serif;flex-shrink:0}
+  font-size:10px;font-weight:800;font-family:'Inter',sans-serif;flex-shrink:0}
 
 /* ── QUICK STATS BAR ── */
 .stat-bar-row{display:flex;gap:3px;height:8px;border-radius:4px;overflow:hidden;margin-top:8px}
@@ -633,7 +674,7 @@ tr:last-child td{border-bottom:none}
 /* ── EMPTY STATE ── */
 .empty-state{text-align:center;padding:48px 0;opacity:.55}
 .empty-state .emoji{font-size:48px;margin-bottom:12px}
-.empty-state .title{font-family:'Syne',sans-serif;font-size:16px;font-weight:700;margin-bottom:6px}
+.empty-state .title{font-family:'Inter',sans-serif;font-size:16px;font-weight:700;margin-bottom:6px}
 .empty-state .sub{font-size:13px;color:${C.muted}}
 `;
 
@@ -690,7 +731,7 @@ const GlobalSearch = ({ operators, sessions, tratativas, onNavigate, onVerFicha 
     <button onClick={()=>{ setOpen(true); setQ(""); }}
       style={{display:"flex",alignItems:"center",gap:8,padding:"6px 12px",background:C.border+"60",
         border:`1px solid ${C.border}`,borderRadius:8,color:C.muted,fontSize:12,cursor:"pointer",
-        fontFamily:"'DM Sans',sans-serif",transition:"all .2s"}}
+        fontFamily:"'Inter',sans-serif",transition:"all .2s"}}
       title="Busca global (Ctrl+K)">
       🔍 <span className="mob-hide">Buscar...</span>
       <span style={{fontSize:10,background:C.border,padding:"1px 5px",borderRadius:4,marginLeft:2}} className="mob-hide">Ctrl+K</span>
@@ -714,7 +755,7 @@ const GlobalSearch = ({ operators, sessions, tratativas, onNavigate, onVerFicha 
         boxShadow:"0 24px 80px #00000080",overflow:"hidden"}} onClick={e=>e.stopPropagation()}>
         <div style={{display:"flex",alignItems:"center",gap:12,padding:"14px 18px",borderBottom:`1px solid ${C.border}`}}>
           <span style={{fontSize:18}}>🔍</span>
-          <input ref={inputRef} style={{flex:1,background:"none",border:"none",color:C.text,fontSize:15,fontFamily:"'DM Sans',sans-serif",outline:"none"}}
+          <input ref={inputRef} style={{flex:1,background:"none",border:"none",color:C.text,fontSize:15,fontFamily:"'Inter',sans-serif",outline:"none"}}
             placeholder="Buscar operador, RE, mentoria, tratativa..." value={q} onChange={e=>setQ(e.target.value)}/>
           <button onClick={()=>setOpen(false)} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:13}}>ESC</button>
         </div>
@@ -808,6 +849,7 @@ const NAV = [
   { id:"agenda",     label:"Agenda",            icon:"📅", section:"acompanhamento" },
   { id:"tratativas", label:"Tratativas",        icon:"🔁", section:"gestão" },
   { id:"relatorios", label:"Relatórios",        icon:"📊", section:"gestão" },
+  { id:"auditoria",  label:"Auditoria",         icon:"🔍", section:"gestão" },
   { id:"parametros", label:"Parâmetros",        icon:"⚙️", section:"sistema" },
   { id:"base",       label:"Base de Dados",     icon:"🗃️", section:"sistema" },
 ];
@@ -835,7 +877,7 @@ const DashboardPage = ({ data, isReal, onNav, agenda, tratativas }) => {
         : <div className="onboard-card">
             <div style={{display:"flex",alignItems:"flex-start",gap:16,flexWrap:"wrap"}}>
               <div style={{flex:1}}>
-                <div style={{fontFamily:"'Syne',sans-serif",fontSize:15,fontWeight:800,color:C.accent,marginBottom:4}}>
+                <div style={{fontFamily:"'Inter',sans-serif",fontSize:15,fontWeight:800,color:C.accent,marginBottom:4}}>
                   🚀 Bem-vindo ao Elevamente!
                 </div>
                 <div style={{fontSize:12,color:C.muted,marginBottom:12}}>Siga os passos abaixo para ativar os dados reais do sistema:</div>
@@ -858,7 +900,7 @@ const DashboardPage = ({ data, isReal, onNav, agenda, tratativas }) => {
                 ))}
               </div>
               <button onClick={()=>onNav("base")} style={{padding:"10px 20px",borderRadius:10,border:"none",cursor:"pointer",
-                background:`linear-gradient(135deg,${C.accent},${C.accent2})`,color:"#000",fontFamily:"'Syne',sans-serif",
+                background:`linear-gradient(135deg,${C.accent},${C.accent2})`,color:"#000",fontFamily:"'Inter',sans-serif",
                 fontSize:13,fontWeight:800,whiteSpace:"nowrap",alignSelf:"center"}}>
                 📊 Carregar Base
               </button>
@@ -937,7 +979,7 @@ const DashboardPage = ({ data, isReal, onNav, agenda, tratativas }) => {
                 <div key={c.name} style={{ display:"flex",alignItems:"center",gap:8 }}>
                   <div style={{ width:8,height:8,borderRadius:"50%",background:PIE_COLORS[i],flexShrink:0 }}/>
                   <div style={{ flex:1,fontSize:12,color:C.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{c.name}</div>
-                  <div style={{ fontFamily:"'Syne',sans-serif",fontSize:13,fontWeight:700,color:PIE_COLORS[i] }}>{c.value}{isReal?"":"%" }</div>
+                  <div style={{ fontFamily:"'Inter',sans-serif",fontSize:13,fontWeight:700,color:PIE_COLORS[i] }}>{c.value}{isReal?"":"%" }</div>
                 </div>
               ))}
             </div>
@@ -978,7 +1020,7 @@ const DashboardPage = ({ data, isReal, onNav, agenda, tratativas }) => {
         <div className="card" style={{ display:"flex",gap:20,alignItems:"center" }}>
           <Ring value={kpis.taxaMelhora}/>
           <div>
-            <div style={{ fontFamily:"'Syne',sans-serif",fontSize:16,fontWeight:700,marginBottom:8 }}>Taxa de Melhora</div>
+            <div style={{ fontFamily:"'Inter',sans-serif",fontSize:16,fontWeight:700,marginBottom:8 }}>Taxa de Melhora</div>
             <div style={{ color:C.muted,fontSize:13,lineHeight:1.8 }}>
               <span style={{ color:C.green,fontWeight:600 }}>{kpis.melhoraram} de {kpis.emMentoria}</span> operadores<br/>
               que passaram pela mentoria<br/>apresentaram melhora.
@@ -1021,9 +1063,9 @@ const DashboardPage = ({ data, isReal, onNav, agenda, tratativas }) => {
               return (
                 <div key={a.id} style={{ display:"flex",gap:12,padding:"10px 0",
                   borderBottom:i<agHoje.length-1?`1px solid ${C.border}20`:"none",alignItems:"center" }}>
-                  <div style={{ fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:13,color:tp.color,minWidth:44 }}>{a.hora}</div>
+                  <div style={{ fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:13,color:tp.color,minWidth:44 }}>{a.hora}</div>
                   <div style={{ width:32,height:32,borderRadius:8,background:`${ac}20`,color:ac,display:"flex",
-                    alignItems:"center",justifyContent:"center",fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:11,flexShrink:0 }}>
+                    alignItems:"center",justifyContent:"center",fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:11,flexShrink:0 }}>
                     {initials(a.nome)}
                   </div>
                   <div style={{ flex:1,minWidth:0 }}>
@@ -1176,7 +1218,7 @@ const OperadoresPage = ({ operators, onVerFicha }) => {
       {lista.length===0 && (
         <div style={{ textAlign:"center",padding:"60px 0",opacity:.5 }}>
           <div style={{ fontSize:40,marginBottom:10 }}>🔍</div>
-          <div style={{ fontFamily:"'Syne',sans-serif",fontSize:16 }}>Nenhum operador encontrado</div>
+          <div style={{ fontFamily:"'Inter',sans-serif",fontSize:16 }}>Nenhum operador encontrado</div>
         </div>
       )}
     </div>
@@ -1206,14 +1248,14 @@ const BasePage = ({ fileName, fileSize, sheetSummary, onUpload, onDelete, isReal
             onDragLeave={()=>setDrag(false)}
             onDrop={onDrop}>
             <div style={{ fontSize:48,marginBottom:12 }}>📊</div>
-            <div style={{ fontFamily:"'Syne',sans-serif",fontSize:16,fontWeight:700,marginBottom:6 }}>Clique ou arraste o arquivo Excel aqui</div>
+            <div style={{ fontFamily:"'Inter',sans-serif",fontSize:16,fontWeight:700,marginBottom:6 }}>Clique ou arraste o arquivo Excel aqui</div>
             <div style={{ fontSize:13,color:C.muted }}>Formatos aceitos: .xlsx, .xls · Múltiplas abas processadas automaticamente</div>
             <input ref={inputRef} type="file" accept=".xlsx,.xls" style={{ display:"none" }} onChange={e=>handleFile(e.target.files[0])}/>
           </div>
         ) : (
           <div className="upload-zone has-file">
             <div style={{ fontSize:48,marginBottom:12 }}>✅</div>
-            <div style={{ fontFamily:"'Syne',sans-serif",fontSize:16,fontWeight:700,color:C.green,marginBottom:6 }}>Base de dados carregada e processada!</div>
+            <div style={{ fontFamily:"'Inter',sans-serif",fontSize:16,fontWeight:700,color:C.green,marginBottom:6 }}>Base de dados carregada e processada!</div>
             <div className="file-chip">
               <span style={{ fontSize:20 }}>📊</span>
               <div><div className="file-name">{fileName}</div><div className="file-size">{fmt(fileSize)}</div></div>
@@ -1608,7 +1650,7 @@ async function gerarPDFRelatorio(data, sessions, tratativas, custos) {
   // Ranking
   doc.addPage(); y=14;
   doc.setFontSize(12); doc.setFont(undefined,"bold"); doc.setTextColor(0,60,120);
-  doc.text("■ RANKING DE OPERADORES POR RISCO", 14, y); y+=7;
+  doc.text("■ Ranking de Operadores por Risco", 14, y); y+=7;
   const ranking=[...ops].map(op=>{const score=(op.faltas||0)*3+(op.multas||0)*2+(op.suspensoes||0)*5+(op.acidentes||0)*4;return{...op,score};}).sort((a,b)=>b.score-a.score).slice(0,15);
   doc.autoTable({ startY:y, head:[["#","RE","Nome","Garagem","Função","Faltas","Multas","Susp","Acid","Score","Status","Perda Est. (R$)"]],
     body:ranking.map((op,i)=>{const f=op.faltas||0,at=op.atestados||0,vd=getValorDia(op.funcao,custos),dsr=Math.round(f*0.70),fp=f<=5?0:f<=14?6:f<=23?12:f<=32?18:30;const perda=f*vd+dsr*vd+fp*vd+fp*(vd/3)+at*(custos.valorVR||0)+(op.multasValor||0);return[i+1,op.re,op.nome,op.garagem,op.funcao,op.faltas||0,op.multas||0,op.suspensoes||0,op.acidentes||0,op.score,op.status,fmtBRL(perda)];}),
@@ -1616,14 +1658,70 @@ async function gerarPDFRelatorio(data, sessions, tratativas, custos) {
     bodyStyles:{fontSize:8}, margin:{left:14,right:14}, tableWidth:W-28 });
   y=doc.lastAutoTable.finalY+8;
 
-  // Tratativas
+  // Tratativas por setor
   doc.addPage(); y=14;
-  doc.setFontSize(12); doc.setFont(undefined,"bold"); doc.setTextColor(0,60,120);
-  doc.text("■ TRATATIVAS", 14, y); y+=7;
-  doc.autoTable({ startY:y, head:[["RE","Nome","Área","Subárea","Data","Prazo","Prioridade","Status","Retorno"]],
-    body:tratativas.map(t=>[t.re,t.nome,t.area,t.subarea||"–",t.data,t.prazo||"–",t.prioridade,t.status,t.retorno||"–"]),
-    theme:"striped", headStyles:{fillColor:[0,60,120],textColor:255,fontSize:7},
-    bodyStyles:{fontSize:7.5}, margin:{left:14,right:14}, tableWidth:W-28 });
+  doc.setFontSize(13); doc.setFont(undefined,"bold"); doc.setTextColor(0,60,120);
+  doc.text("■ TRATATIVAS — Resumo por Setor", 14, y); y+=9;
+
+  // Resumo por área
+  const setoresStats = Object.values(
+    tratativas.reduce((acc,t)=>{
+      if(!acc[t.area]) acc[t.area]={area:t.area,total:0,pendente:0,andamento:0,concluido:0};
+      acc[t.area].total++;
+      acc[t.area][t.status]=(acc[t.area][t.status]||0)+1;
+      return acc;
+    },{})
+  );
+  doc.autoTable({
+    startY:y,
+    head:[["Setor","Total","Pendentes","Em Andamento","Concluídas","% Conclusão"]],
+    body:setoresStats.map(s=>[
+      s.area,
+      s.total,
+      s.pendente||0,
+      s.andamento||0,
+      s.concluido||0,
+      s.total>0?Math.round(((s.concluido||0)/s.total)*100)+"%" :"0%"
+    ]),
+    theme:"grid",
+    headStyles:{fillColor:[0,60,120],textColor:255,fontSize:9,fontStyle:"bold"},
+    bodyStyles:{fontSize:9},
+    columnStyles:{0:{fontStyle:"bold"},5:{fontStyle:"bold"}},
+    margin:{left:14,right:14}, tableWidth:W-28
+  });
+  y = doc.lastAutoTable.finalY+10;
+  checkPage(20);
+
+  // Totais gerais
+  const totPend = tratativas.filter(t=>t.status==="pendente").length;
+  const totAnd  = tratativas.filter(t=>t.status==="andamento").length;
+  const totConc = tratativas.filter(t=>t.status==="concluido").length;
+  doc.setFontSize(10); doc.setFont(undefined,"normal"); doc.setTextColor(50,50,50);
+  doc.text(`Total geral: ${tratativas.length}  |  Pendentes: ${totPend}  |  Em Andamento: ${totAnd}  |  Concluídas: ${totConc}`, 14, y); y+=10;
+
+  // Tabela detalhada
+  checkPage(30);
+  doc.setFontSize(11); doc.setFont(undefined,"bold"); doc.setTextColor(0,60,120);
+  doc.text("■ TRATATIVAS — Detalhamento Completo", 14, y); y+=7;
+  doc.autoTable({
+    startY:y,
+    head:[["RE","Nome","Área","Subárea","Data","Prazo","Prioridade","Status","Retorno"]],
+    body:tratativas.map(t=>[
+      t.re, t.nome, t.area, t.subarea||"–", t.data,
+      t.prazo||"–", t.prioridade, t.status, t.retorno?"Sim":"Não"
+    ]),
+    theme:"striped",
+    headStyles:{fillColor:[0,60,120],textColor:255,fontSize:7,fontStyle:"bold"},
+    bodyStyles:{fontSize:7.5},
+    didParseCell:(data)=>{
+      if(data.column.index===7){
+        if(data.cell.raw==="concluido"){data.cell.styles.textColor=[16,185,129];data.cell.styles.fontStyle="bold";}
+        if(data.cell.raw==="pendente"){data.cell.styles.textColor=[239,68,68];}
+        if(data.cell.raw==="andamento"){data.cell.styles.textColor=[245,158,11];}
+      }
+    },
+    margin:{left:14,right:14}, tableWidth:W-28
+  });
 
   const pageCount=doc.internal.getNumberOfPages();
   for(let i=1;i<=pageCount;i++){
@@ -1660,7 +1758,7 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
   if (!op) return (
     <div style={{textAlign:"center",padding:"60px 0",opacity:.5}}>
       <div style={{fontSize:48,marginBottom:12}}>📋</div>
-      <div style={{fontFamily:"'Syne',sans-serif",fontSize:18,fontWeight:700}}>Nenhum operador selecionado</div>
+      <div style={{fontFamily:"'Inter',sans-serif",fontSize:18,fontWeight:700}}>Nenhum operador selecionado</div>
       <div style={{color:C.muted,fontSize:13,marginTop:6}}>Acesse a lista de operadores e clique em "Ver Ficha"</div>
       <button className="abt" style={{marginTop:16}} onClick={onBack}>← Ver Operadores</button>
     </div>
@@ -1763,7 +1861,7 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
             ].map(x=>(
               <div key={x.l} style={{background:C.bg,borderRadius:8,padding:"8px 10px",textAlign:"center"}}>
                 <div style={{fontSize:10,color:C.muted,marginBottom:2}}>{x.l}</div>
-                <div style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:13,color:C.gold}}>{x.v}</div>
+                <div style={{fontFamily:"'Inter',sans-serif",fontWeight:700,fontSize:13,color:C.gold}}>{x.v}</div>
               </div>
             ))}
           </div>
@@ -1781,11 +1879,11 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
           PERFIL DO OPERADOR — Relatório Gerencial (Diretoria) · {op.re}
         </div>
         <div style={{display:"flex",gap:20,alignItems:"flex-start",flexWrap:"wrap"}}>
-          <div className="ficha-avatar" style={{background:`${ac}20`,color:ac,border:`2px solid ${ac}40`,width:64,height:64,borderRadius:16,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:22,flexShrink:0}}>
+          <div className="ficha-avatar" style={{background:`${ac}20`,color:ac,border:`2px solid ${ac}40`,width:64,height:64,borderRadius:16,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:22,flexShrink:0}}>
             {initials(op.nome)}
           </div>
           <div style={{flex:1,minWidth:200}}>
-            <div style={{fontFamily:"'Syne',sans-serif",fontSize:22,fontWeight:800,marginBottom:6}}>{op.nome}</div>
+            <div style={{fontFamily:"'Inter',sans-serif",fontSize:22,fontWeight:800,marginBottom:6}}>{op.nome}</div>
             <div style={{display:"flex",gap:12,flexWrap:"wrap",fontSize:13,color:C.muted,marginBottom:10}}>
               <span className="re-tag">{op.re}</span>
               <span>📌 {op.funcao}</span>
@@ -1805,7 +1903,7 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
           {/* Comprometimento */}
           {op.comprometimento&&(
             <div style={{textAlign:"center",background:C.bg,borderRadius:12,padding:"14px 18px",minWidth:90}}>
-              <div style={{fontFamily:"'Syne',sans-serif",fontSize:26,fontWeight:800,color:compColor}}>{op.comprometimento}/5</div>
+              <div style={{fontFamily:"'Inter',sans-serif",fontSize:26,fontWeight:800,color:compColor}}>{op.comprometimento}/5</div>
               <div style={{fontSize:10,color:C.muted,marginBottom:6}}>Comprometimento</div>
               <div style={{display:"flex",gap:2,justifyContent:"center"}}>
                 {[1,2,3,4,5].map(i=><span key={i} style={{fontSize:14,color:i<=op.comprometimento?C.gold:"#2a3a4a"}}>★</span>)}
@@ -1814,7 +1912,7 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
           )}
           {/* Perda financeira destaque */}
           <div style={{textAlign:"center",background:`${C.red}10`,border:`1px solid ${C.red}30`,borderRadius:12,padding:"14px 18px",minWidth:120}}>
-            <div style={{fontFamily:"'Syne',sans-serif",fontSize:20,fontWeight:800,color:C.red}}>{fmtBRL(perda.totalGeral)}</div>
+            <div style={{fontFamily:"'Inter',sans-serif",fontSize:20,fontWeight:800,color:C.red}}>{fmtBRL(perda.totalGeral)}</div>
             <div style={{fontSize:10,color:C.muted,marginTop:4,lineHeight:1.4}}>Perda financeira<br/>estimada</div>
           </div>
         </div>
@@ -1889,14 +1987,14 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
                             <div style={{width:60,height:5,background:C.border,borderRadius:3,overflow:"hidden"}}>
                               <div style={{width:`${totalEvs?Math.round(e.qtd/totalEvs*100):0}%`,height:"100%",background:cor,borderRadius:3}}/>
                             </div>
-                            <span style={{fontFamily:"'Syne',sans-serif",fontWeight:800,color:cor,minWidth:24}}>{e.qtd}</span>
+                            <span style={{fontFamily:"'Inter',sans-serif",fontWeight:800,color:cor,minWidth:24}}>{e.qtd}</span>
                           </div>
                         </td>
                       </tr>);
                     })}
                     <tr style={{borderTop:`2px solid ${C.border}`}}>
                       <td colSpan={2} style={{fontWeight:700,paddingTop:10}}>TOTAL GERAL</td>
-                      <td style={{textAlign:"right",fontFamily:"'Syne',sans-serif",fontWeight:800,color:C.accent,fontSize:16,paddingTop:10}}>{totalEvs}</td>
+                      <td style={{textAlign:"right",fontFamily:"'Inter',sans-serif",fontWeight:800,color:C.accent,fontSize:16,paddingTop:10}}>{totalEvs}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -1932,16 +2030,16 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
                           <td style={{textAlign:"center",color:m.M>0?C.orange:C.muted,fontWeight:m.M>0?700:400}}>{m.M||0}</td>
                           <td style={{textAlign:"center",color:m.S>0?C.purple:C.muted,fontWeight:m.S>0?700:400}}>{m.S||0}</td>
                           <td style={{textAlign:"center",color:C.muted}}>{m.T||0}</td>
-                          <td style={{textAlign:"right",fontFamily:"'Syne',sans-serif",fontWeight:700}}>{m.total}</td>
+                          <td style={{textAlign:"right",fontFamily:"'Inter',sans-serif",fontWeight:700}}>{m.total}</td>
                         </tr>
                       ))}
                       <tr style={{borderTop:`2px solid ${C.border}`,fontWeight:700}}>
                         <td>TOTAL GERAL</td>
-                        <td style={{textAlign:"center",color:C.red,fontFamily:"'Syne',sans-serif",fontWeight:800}}>{evMesList.reduce((a,m)=>a+(m.F||0),0)}</td>
-                        <td style={{textAlign:"center",color:C.orange,fontFamily:"'Syne',sans-serif",fontWeight:800}}>{evMesList.reduce((a,m)=>a+(m.M||0),0)}</td>
-                        <td style={{textAlign:"center",color:C.purple,fontFamily:"'Syne',sans-serif",fontWeight:800}}>{evMesList.reduce((a,m)=>a+(m.S||0),0)}</td>
-                        <td style={{textAlign:"center",color:C.muted,fontFamily:"'Syne',sans-serif",fontWeight:800}}>{evMesList.reduce((a,m)=>a+(m.T||0),0)}</td>
-                        <td style={{textAlign:"right",color:C.accent,fontFamily:"'Syne',sans-serif",fontSize:15,fontWeight:800}}>{totalEvs}</td>
+                        <td style={{textAlign:"center",color:C.red,fontFamily:"'Inter',sans-serif",fontWeight:800}}>{evMesList.reduce((a,m)=>a+(m.F||0),0)}</td>
+                        <td style={{textAlign:"center",color:C.orange,fontFamily:"'Inter',sans-serif",fontWeight:800}}>{evMesList.reduce((a,m)=>a+(m.M||0),0)}</td>
+                        <td style={{textAlign:"center",color:C.purple,fontFamily:"'Inter',sans-serif",fontWeight:800}}>{evMesList.reduce((a,m)=>a+(m.S||0),0)}</td>
+                        <td style={{textAlign:"center",color:C.muted,fontFamily:"'Inter',sans-serif",fontWeight:800}}>{evMesList.reduce((a,m)=>a+(m.T||0),0)}</td>
+                        <td style={{textAlign:"right",color:C.accent,fontFamily:"'Inter',sans-serif",fontSize:15,fontWeight:800}}>{totalEvs}</td>
                       </tr>
                     </tbody>
                   </table>
@@ -1960,10 +2058,10 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
           <div style={{background:`${C.red}10`,border:`1px solid ${C.red}30`,borderRadius:14,padding:"18px 22px",marginBottom:20,display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
             <div style={{fontSize:36}}>💸</div>
             <div style={{flex:1}}>
-              <div style={{fontFamily:"'Syne',sans-serif",fontSize:14,fontWeight:700,color:C.red,marginBottom:3}}>■ Perda Financeira Total Estimada</div>
+              <div style={{fontFamily:"'Inter',sans-serif",fontSize:14,fontWeight:700,color:C.red,marginBottom:3}}>■ Perda Financeira Total Estimada</div>
               <div style={{fontSize:12,color:C.muted}}>Calculado com base nos eventos registrados. Valores aproximados — utilize os custos reais do contrato coletivo.</div>
             </div>
-            <div style={{fontFamily:"'Syne',sans-serif",fontSize:32,fontWeight:800,color:C.red,whiteSpace:"nowrap"}}>{fmtBRL(perda.totalGeral)}</div>
+            <div style={{fontFamily:"'Inter',sans-serif",fontSize:32,fontWeight:800,color:C.red,whiteSpace:"nowrap"}}>{fmtBRL(perda.totalGeral)}</div>
           </div>
 
           {/* Custos utilizados */}
@@ -1971,7 +2069,7 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
             {[{l:"Valor Diário",v:fmtBRL(custos.valorDiario),c:C.accent},{l:"VR / Dia",v:fmtBRL(custos.valorVR),c:C.green},{l:"1/3 Férias",v:fmtBRL(custos.valorDiario/3),c:C.gold}].map(x=>(
               <div key={x.l} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"10px 16px",flex:1,minWidth:90}}>
                 <div style={{fontSize:11,color:C.muted,marginBottom:2}}>{x.l}</div>
-                <div style={{fontFamily:"'Syne',sans-serif",fontSize:18,fontWeight:800,color:x.c}}>{x.v}</div>
+                <div style={{fontFamily:"'Inter',sans-serif",fontSize:18,fontWeight:800,color:x.c}}>{x.v}</div>
               </div>
             ))}
             <button className="abt no-print" style={{padding:"10px 16px",alignSelf:"center"}} onClick={()=>setEditCustos(true)}>⚙️ Editar custos</button>
@@ -1987,17 +2085,17 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
                   {perda.itens.map((item,i)=>(
                     <tr key={i}>
                       <td style={{fontSize:13}}>{item.desc}</td>
-                      <td style={{textAlign:"center",fontFamily:"'Syne',sans-serif",fontWeight:700,color:item.qtd===0?C.muted:item.tipo==="falta"?C.red:item.tipo==="multa"?C.orange:C.text}}>{item.qtd}</td>
+                      <td style={{textAlign:"center",fontFamily:"'Inter',sans-serif",fontWeight:700,color:item.qtd===0?C.muted:item.tipo==="falta"?C.red:item.tipo==="multa"?C.orange:C.text}}>{item.qtd}</td>
                       <td style={{fontSize:12,color:C.muted}}>{item.un}</td>
                       <td style={{textAlign:"right",fontSize:12,color:C.muted}}>{fmtBRL(item.valorUn)}</td>
-                      <td style={{textAlign:"right",fontFamily:"'Syne',sans-serif",fontWeight:700,color:item.total===0?C.muted:C.red}}>{fmtBRL(item.total)}</td>
+                      <td style={{textAlign:"right",fontFamily:"'Inter',sans-serif",fontWeight:700,color:item.total===0?C.muted:C.red}}>{fmtBRL(item.total)}</td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
                   <tr style={{borderTop:`2px solid ${C.border}`}}>
-                    <td colSpan={4} style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:14,paddingTop:14}}>TOTAL GERAL</td>
-                    <td style={{textAlign:"right",fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:20,color:C.red,paddingTop:14}}>{fmtBRL(perda.totalGeral)}</td>
+                    <td colSpan={4} style={{fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:14,paddingTop:14}}>TOTAL GERAL</td>
+                    <td style={{textAlign:"right",fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:20,color:C.red,paddingTop:14}}>{fmtBRL(perda.totalGeral)}</td>
                   </tr>
                 </tfoot>
               </table>
@@ -2012,7 +2110,7 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
                 const ativo=op.faltas>=f.min&&op.faltas<=f.max;
                 return(<div key={i} style={{background:ativo?`${C.red}18`:C.bg,border:`1px solid ${ativo?C.red:C.border}`,borderRadius:10,padding:"12px 14px",textAlign:"center",transition:"all .3s"}}>
                   <div style={{fontSize:11,color:ativo?C.red:C.muted,fontWeight:600,marginBottom:4}}>{f.max>=999?`≥ ${f.min}`:`${f.min}–${f.max}`} faltas</div>
-                  <div style={{fontFamily:"'Syne',sans-serif",fontSize:22,fontWeight:800,color:ativo?C.red:C.muted}}>{f.ferias}d</div>
+                  <div style={{fontFamily:"'Inter',sans-serif",fontSize:22,fontWeight:800,color:ativo?C.red:C.muted}}>{f.ferias}d</div>
                   <div style={{fontSize:10,color:ativo?C.red:C.muted,marginTop:2}}>{f.perda===0?"Férias integrais":`Perde ${f.perda} dias`}</div>
                   {ativo&&<div style={{marginTop:6,fontSize:10,fontWeight:700,color:C.red}}>← ATUAL</div>}
                 </div>);
@@ -2042,7 +2140,7 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
           <div className="card">
             <div className="ct" style={{justifyContent:"space-between",display:"flex"}}>
               <span style={{display:"flex",alignItems:"center",gap:8}}><span className="ctd"/>■ Autos de Infração — Base de Multas</span>
-              {multasVal>0&&<span style={{fontFamily:"'Syne',sans-serif",fontWeight:800,color:C.red,fontSize:15}}>Total: {fmtBRL(multasVal)}</span>}
+              {multasVal>0&&<span style={{fontFamily:"'Inter',sans-serif",fontWeight:800,color:C.red,fontSize:15}}>Total: {fmtBRL(multasVal)}</span>}
             </div>
             {multasDet.length===0
               ?<div style={{color:C.muted,fontSize:13,padding:"12px 0"}}>✓ Nenhum auto de infração registrado para este operador.</div>
@@ -2055,13 +2153,13 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
                       <td style={{fontFamily:"monospace",color:C.accent}}>{m.linha}</td>
                       <td style={{fontSize:12}}>{m.descricao}</td>
                       <td style={{fontSize:12,color:C.orange}}>{m.enquadramento}</td>
-                      <td style={{textAlign:"right",fontFamily:"'Syne',sans-serif",fontWeight:700,color:C.red}}>{fmtBRL(m.valor)}</td>
+                      <td style={{textAlign:"right",fontFamily:"'Inter',sans-serif",fontWeight:700,color:C.red}}>{fmtBRL(m.valor)}</td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot><tr style={{borderTop:`2px solid ${C.border}`}}>
                   <td colSpan={4} style={{fontWeight:700,paddingTop:10}}>Total em multas</td>
-                  <td style={{textAlign:"right",fontFamily:"'Syne',sans-serif",fontWeight:800,color:C.red,fontSize:16,paddingTop:10}}>{fmtBRL(multasVal)}</td>
+                  <td style={{textAlign:"right",fontFamily:"'Inter',sans-serif",fontWeight:800,color:C.red,fontSize:16,paddingTop:10}}>{fmtBRL(multasVal)}</td>
                 </tr></tfoot>
               </table></div>
             }
@@ -2097,14 +2195,14 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
           {relatos.length===0&&(
             <div className="card" style={{textAlign:"center",padding:"48px 0"}}>
               <div style={{fontSize:40,marginBottom:10}}>💬</div>
-              <div style={{fontFamily:"'Syne',sans-serif",fontSize:16,fontWeight:700}}>{op.status==="aguardando"?"Operador ainda não passou pela mentoria":"Nenhum relato registrado"}</div>
+              <div style={{fontFamily:"'Inter',sans-serif",fontSize:16,fontWeight:700}}>{op.status==="aguardando"?"Operador ainda não passou pela mentoria":"Nenhum relato registrado"}</div>
               <div style={{color:C.muted,fontSize:13,marginTop:6}}>{op.status==="aguardando"?"Agende uma mentoria para iniciar o acompanhamento.":"Os relatos aparecerão aqui após o preenchimento do formulário."}</div>
             </div>
           )}
           {relatos.map((r,i)=>(
             <div className="card" key={i} style={{marginBottom:16,borderLeft:`3px solid ${i===0?C.accent:i===relatos.length-1?C.green:C.gold}`}}>
               <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14,flexWrap:"wrap"}}>
-                <div style={{fontFamily:"'Syne',sans-serif",fontSize:14,fontWeight:700,color:C.accent}}>Sessão {i+1}</div>
+                <div style={{fontFamily:"'Inter',sans-serif",fontSize:14,fontWeight:700,color:C.accent}}>Sessão {i+1}</div>
                 <div style={{fontSize:12,color:C.muted}}>📅 {r.data}</div>
                 {r.acompanhante!=="Sozinho"&&<div style={{fontSize:12,background:`${C.accent2}15`,border:`1px solid ${C.accent2}30`,borderRadius:6,padding:"2px 8px",color:C.accent2}}>👥 {r.acompanhante}</div>}
                 <div style={{marginLeft:"auto",display:"flex",gap:3,alignItems:"center"}}>
@@ -2138,7 +2236,7 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
           {encamins.length===0&&(
             <div className="card" style={{textAlign:"center",padding:"48px 0"}}>
               <div style={{fontSize:40,marginBottom:10}}>🔁</div>
-              <div style={{fontFamily:"'Syne',sans-serif",fontSize:16,fontWeight:700}}>Nenhuma tratativa registrada</div>
+              <div style={{fontFamily:"'Inter',sans-serif",fontSize:16,fontWeight:700}}>Nenhuma tratativa registrada</div>
             </div>
           )}
           {encamins.map((e,i)=>{
@@ -2175,11 +2273,13 @@ const SESSIONS_INIT = [
 
 const CAUSAS_OPTIONS = ["Problemas familiares","Saúde / bem-estar","Financeiro","Conflito interno com colega","Conflito com liderança","Uso de substâncias","Problema jurídico","Luto / perda","Outros"];
 const SETORES_MAP = {
-  "RH":          ["Orientação","Ambulatório","Benefícios","DP"],
-  "Psicologia":  ["Psicólogo","Grupo de apoio","Encaminhamento externo"],
-  "DP":          ["Advertência","Suspensão","Desligamento","Orientação disciplinar"],
-  "Ambulatório": ["Médico","Enfermagem","Exame","Encaminhamento INSS"],
-  "Jurídico":    ["Análise","Mediação","Processo interno"],
+  "RH":                    ["RH Geral","DP","Médico","Psicólogo"],
+  "Jurídico":              ["Análise","Mediação","Processo interno"],
+  "Planejamento":          ["Planejamento Operacional","Análise de dados","Gestão de escala"],
+  "Gerente Operacional":   ["Gerente G1","Gerente G2","Gerente G3","Gerente G4"],
+};
+const AREA_ICONS_MAP = {
+  "RH":"👔", "Jurídico":"⚖️", "Planejamento":"📋", "Gerente Operacional":"👨‍💼",
 };
 
 // ─── MENTORIA PAGE ─────────────────────────────────────────────────────────────
@@ -2205,7 +2305,13 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
     const op = operators.find(o=>o.re===re);
     if (op) upd("nome", op.nome);
     upd("re", re);
+    setOpSearch("");
+    setOpDropOpen(false);
   };
+
+  const [opSearch, setOpSearch]       = useState("");
+  const [opDropOpen, setOpDropOpen]   = useState(false);
+  const [outrosText, setOutrosText]   = useState("");
 
   const handleSubmit = () => {
     const newSession = { ...form, id: Date.now(), status:"andamento" };
@@ -2287,7 +2393,7 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
     <div className="fu d1">
       {/* Header com toggle */}
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20,flexWrap:"wrap"}}>
-        <div style={{fontFamily:"'Syne',sans-serif",fontSize:18,fontWeight:700}}>
+        <div style={{fontFamily:"'Inter',sans-serif",fontSize:18,fontWeight:700}}>
           {viewMode==="lista"?"Sessões Registradas":"Nova Sessão de Mentoria"}
         </div>
         <div style={{flex:1}}/>
@@ -2314,14 +2420,14 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
               {v:[...new Set(allSessions.flatMap(s=>s.causas))].length, l:"Causas identificadas", c:C.gold},
             ].map(x=>(
               <div key={x.l} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 18px"}}>
-                <div style={{fontFamily:"'Syne',sans-serif",fontSize:26,fontWeight:800,color:x.c}}>{x.v}</div>
+                <div style={{fontFamily:"'Inter',sans-serif",fontSize:26,fontWeight:800,color:x.c}}>{x.v}</div>
                 <div style={{fontSize:11,color:C.muted,marginTop:3}}>{x.l}</div>
               </div>
             ))}
           </div>
 
           <input style={{background:C.card,border:`1px solid ${C.border}`,color:C.text,padding:"10px 16px",
-            borderRadius:10,fontSize:13,fontFamily:"'DM Sans',sans-serif",width:"100%",outline:"none",marginBottom:16}}
+            borderRadius:10,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none",marginBottom:16}}
             placeholder="🔍  Filtrar por RE ou nome..." value={filterRe} onChange={e=>setFilterRe(e.target.value)}/>
 
           {filtered.map(s=>{
@@ -2333,7 +2439,7 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
                 onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
                 <div style={{display:"flex",alignItems:"flex-start",gap:14,flexWrap:"wrap"}}>
                   <div style={{width:42,height:42,borderRadius:12,background:`${ac}20`,color:ac,border:`1px solid ${ac}30`,
-                    display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:14,flexShrink:0}}>
+                    display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:14,flexShrink:0}}>
                     {initials(s.nome)}
                   </div>
                   <div style={{flex:1,minWidth:0}}>
@@ -2367,7 +2473,7 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
           {filtered.length===0&&(
             <div style={{textAlign:"center",padding:"60px 0",opacity:.5}}>
               <div style={{fontSize:40,marginBottom:10}}>📋</div>
-              <div style={{fontFamily:"'Syne',sans-serif",fontSize:16}}>Nenhuma sessão encontrada</div>
+              <div style={{fontFamily:"'Inter',sans-serif",fontSize:16}}>Nenhuma sessão encontrada</div>
             </div>
           )}
         </div>
@@ -2383,7 +2489,7 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
                 background:i===step?C.card:"transparent",
                 borderBottom:i===step?`2px solid ${C.accent}`:"2px solid transparent"}}
                 onClick={()=>i<step&&setStep(i)}>
-                <div style={{fontFamily:"'Syne',sans-serif",fontSize:18,fontWeight:800,
+                <div style={{fontFamily:"'Inter',sans-serif",fontSize:18,fontWeight:800,
                   color:i<step?C.green:i===step?C.accent:C.muted}}>{i<step?"✓":i+1}</div>
                 <div style={{fontSize:12,fontWeight:600,color:i===step?C.accent:C.muted,marginTop:2}}>{s}</div>
               </div>
@@ -2395,29 +2501,70 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
             <div className="card">
               <div className="ct"><span className="ctd"/>Identificação do Operador e Sessão</div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}} className="form-grid-2">
-                <div>
+                <div style={{position:"relative"}}>
                   <label style={{fontSize:12,color:C.muted,display:"block",marginBottom:6}}>RE do Operador *</label>
-                  <select style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"10px 14px",borderRadius:9,fontSize:13,fontFamily:"'DM Sans',sans-serif",width:"100%",outline:"none"}}
-                    value={form.re} onChange={e=>handleReSelect(e.target.value)}>
-                    <option value="">Selecione o operador...</option>
-                    {operators.map(o=><option key={o.re} value={o.re}>{o.re} – {o.nome}</option>)}
-                  </select>
+                  <input
+                    style={{background:C.bg,border:`1px solid ${form.re?C.accent:C.border}`,color:C.text,padding:"10px 14px",
+                      borderRadius:9,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none"}}
+                    placeholder="Digite o RE ou nome para buscar..."
+                    value={opSearch || (form.re ? `${form.re} – ${form.nome}` : "")}
+                    onChange={e=>{ setOpSearch(e.target.value); setOpDropOpen(true); upd("re",""); upd("nome",""); }}
+                    onFocus={()=>setOpDropOpen(true)}
+                  />
+                  {opDropOpen && (opSearch.length>=1 || !form.re) && (()=>{
+                    const q = opSearch.toLowerCase();
+                    const opts = operators.filter(o=>
+                      !q || o.re.toLowerCase().includes(q) || o.nome.toLowerCase().includes(q)
+                    ).slice(0,8);
+                    if (!opts.length) return null;
+                    return(
+                      <div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:200,
+                        background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,
+                        boxShadow:"0 8px 24px #00000060",maxHeight:240,overflowY:"auto",marginTop:4}}>
+                        {opts.map(op=>{
+                          const ac=avatarColor(op.re);
+                          return(
+                            <div key={op.re}
+                              onMouseDown={()=>handleReSelect(op.re)}
+                              style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",cursor:"pointer",transition:"all .15s"}}
+                              onMouseEnter={e=>e.currentTarget.style.background=C.border}
+                              onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                              <div style={{width:32,height:32,borderRadius:8,background:`${ac}20`,color:ac,
+                                display:"flex",alignItems:"center",justifyContent:"center",
+                                fontWeight:700,fontSize:11,flexShrink:0}}>{initials(op.nome)}</div>
+                              <div style={{flex:1}}>
+                                <div style={{fontSize:13,fontWeight:600}}>{op.nome}</div>
+                                <div style={{fontSize:11,color:C.muted}}>{op.re} · {op.funcao} · Garagem {op.garagem}</div>
+                              </div>
+                              <span style={{fontSize:10,background:`${C.border}`,borderRadius:5,padding:"2px 6px",color:C.muted}}>{op.status}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                  {form.re && (
+                    <div style={{marginTop:6,padding:"6px 10px",background:`${C.accent}15`,border:`1px solid ${C.accent}30`,
+                      borderRadius:7,fontSize:12,color:C.accent,display:"flex",alignItems:"center",gap:6}}>
+                      ✓ <strong>{form.re}</strong> — {form.nome}
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label style={{fontSize:12,color:C.muted,display:"block",marginBottom:6}}>Data da Sessão *</label>
-                  <input style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"10px 14px",borderRadius:9,fontSize:13,fontFamily:"'DM Sans',sans-serif",width:"100%",outline:"none"}}
+                  <input style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"10px 14px",borderRadius:9,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none"}}
                     value={form.data} onChange={e=>upd("data",e.target.value)} placeholder="dd/mm/aa"/>
                 </div>
                 <div>
                   <label style={{fontSize:12,color:C.muted,display:"block",marginBottom:6}}>Tipo de Acompanhante</label>
-                  <select style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"10px 14px",borderRadius:9,fontSize:13,fontFamily:"'DM Sans',sans-serif",width:"100%",outline:"none"}}
+                  <select style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"10px 14px",borderRadius:9,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none"}}
                     value={form.tipoAcomp} onChange={e=>upd("tipoAcomp",e.target.value)}>
                     {["Sozinho","Cônjuge","Familiar","Responsável legal","Outro"].map(t=><option key={t}>{t}</option>)}
                   </select>
                 </div>
                 <div>
                   <label style={{fontSize:12,color:C.muted,display:"block",marginBottom:6}}>Nome do Acompanhante</label>
-                  <input style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"10px 14px",borderRadius:9,fontSize:13,fontFamily:"'DM Sans',sans-serif",width:"100%",outline:"none"}}
+                  <input style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"10px 14px",borderRadius:9,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none"}}
                     value={form.acompanhante} onChange={e=>upd("acompanhante",e.target.value)}
                     placeholder="Deixe em branco se sozinho" disabled={form.tipoAcomp==="Sozinho"}/>
                 </div>
@@ -2425,7 +2572,7 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
               {form.nome&&(
                 <div style={{marginTop:16,padding:"12px 16px",background:C.bg,borderRadius:10,fontSize:13,display:"flex",alignItems:"center",gap:12}}>
                   <div style={{width:36,height:36,borderRadius:10,background:`${avatarColor(form.re)}20`,color:avatarColor(form.re),
-                    display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontFamily:"'Syne',sans-serif",flexShrink:0}}>
+                    display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontFamily:"'Inter',sans-serif",flexShrink:0}}>
                     {initials(form.nome)}
                   </div>
                   <div>
@@ -2452,6 +2599,19 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
                     </button>);
                   })}
                 </div>
+                {/* Campo texto quando "Outros" está selecionado */}
+                {form.causas.includes("Outros") && (
+                  <div style={{marginTop:12}}>
+                    <label style={{fontSize:12,color:C.muted,display:"block",marginBottom:4}}>Descreva a causa (Outros) *</label>
+                    <input
+                      style={{background:C.bg,border:`1px solid ${C.accent}50`,color:C.text,padding:"9px 12px",
+                        borderRadius:8,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none"}}
+                      placeholder="Descreva a causa identificada..."
+                      value={outrosText}
+                      onChange={e=>{setOutrosText(e.target.value);upd("outrosDetalhe",e.target.value);}}
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="card" style={{marginBottom:16}}>
@@ -2473,7 +2633,7 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
               <div className="card">
                 <div className="ct"><span className="ctd"/>Relato da Sessão *</div>
                 <textarea style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"12px 14px",
-                  borderRadius:10,fontSize:13,fontFamily:"'DM Sans',sans-serif",width:"100%",outline:"none",
+                  borderRadius:10,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none",
                   resize:"vertical",minHeight:140,lineHeight:1.7}}
                   placeholder="Descreva o que foi relatado pelo operador e/ou acompanhante durante a sessão, comportamento observado, informações relevantes..."
                   value={form.relato} onChange={e=>upd("relato",e.target.value)}/>
@@ -2547,7 +2707,7 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
               {saved?(
                 <div style={{textAlign:"center",padding:"60px 0"}}>
                   <div style={{fontSize:64,marginBottom:16}}>✅</div>
-                  <div style={{fontFamily:"'Syne',sans-serif",fontSize:22,fontWeight:800,color:C.green,marginBottom:8}}>Sessão registrada!</div>
+                  <div style={{fontFamily:"'Inter',sans-serif",fontSize:22,fontWeight:800,color:C.green,marginBottom:8}}>Sessão registrada!</div>
                   <div style={{color:C.muted,fontSize:14}}>Redirecionando para a lista...</div>
                 </div>
               ):(
@@ -2574,7 +2734,7 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
                   </div>
                   {form.denuncia&&<div style={{padding:"10px 14px",background:`${C.red}10`,border:`1px solid ${C.red}30`,borderRadius:8,fontSize:12,color:C.red,marginBottom:16}}>⚠️ Esta sessão possui uma <strong>denúncia registrada</strong>.</div>}
                   <button onClick={handleSubmit} style={{width:"100%",padding:"14px",background:`linear-gradient(135deg,${C.accent},${C.accent2})`,
-                    color:"#000",border:"none",borderRadius:10,fontFamily:"'Syne',sans-serif",fontSize:15,fontWeight:800,cursor:"pointer",letterSpacing:.5}}>
+                    color:"#000",border:"none",borderRadius:10,fontFamily:"'Inter',sans-serif",fontSize:15,fontWeight:800,cursor:"pointer",letterSpacing:.5}}>
                     ✓ CONFIRMAR E SALVAR SESSÃO
                   </button>
                 </div>
@@ -2589,7 +2749,7 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
               {step<STEPS.length-1
                 ? <button onClick={()=>canNext&&setStep(s=>s+1)} style={{padding:"10px 28px",borderRadius:10,
                     background:canNext?`linear-gradient(135deg,${C.accent},${C.accent2})`:`${C.border}`,
-                    color:canNext?"#000":C.muted,border:"none",fontFamily:"'Syne',sans-serif",fontSize:13,fontWeight:700,cursor:canNext?"pointer":"not-allowed",transition:"all .2s"}}>
+                    color:canNext?"#000":C.muted,border:"none",fontFamily:"'Inter',sans-serif",fontSize:13,fontWeight:700,cursor:canNext?"pointer":"not-allowed",transition:"all .2s"}}>
                     Próximo →
                   </button>
                 : null
@@ -2629,7 +2789,7 @@ const TRAT_ST_MAP = {
 };
 
 // ─── TRATATIVAS PAGE ──────────────────────────────────────────────────────────
-const TratativasPage = ({ tratativas, onUpdate, onAdd, operators }) => {
+const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions }) => {
   const [tab, setTab]         = useState("kanban"); // kanban | lista
   const [filtArea, setFiltArea] = useState("todas");
   const [filtStatus, setFiltStatus] = useState("todos");
@@ -2738,7 +2898,7 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators }) => {
             <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
               <div style={{fontSize:28}}>{AREA_ICONS[detalhes.area]}</div>
               <div style={{flex:1}}>
-                <div style={{fontFamily:"'Syne',sans-serif",fontSize:17,fontWeight:700}}>{detalhes.area}{detalhes.subarea?` → ${detalhes.subarea}`:""}</div>
+                <div style={{fontFamily:"'Inter',sans-serif",fontSize:17,fontWeight:700}}>{detalhes.area}{detalhes.subarea?` → ${detalhes.subarea}`:""}</div>
                 <div style={{fontSize:12,color:C.muted}}>{detalhes.re} · {detalhes.nome}</div>
               </div>
               <button onClick={()=>setDetalhes(null)} style={{background:"none",border:"none",color:C.muted,fontSize:20,cursor:"pointer"}}>✕</button>
@@ -2757,13 +2917,72 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators }) => {
               <div style={{fontSize:13,lineHeight:1.7}}>{detalhes.descricao}</div>
             </div>
 
+            {/* Formulário da mentoria relacionada */}
+            {(()=>{
+              const sess = sessions?.filter(s=>s.re===detalhes.re);
+              if(!sess||!sess.length) return null;
+              return(
+                <div style={{marginBottom:16,background:C.bg,borderRadius:10,padding:"14px 16px",border:`1px solid ${C.accent}25`}}>
+                  <div style={{fontSize:11,color:C.accent,fontWeight:700,marginBottom:10,textTransform:"uppercase",letterSpacing:.5}}>
+                    💬 Formulário de Mentoria ({sess.length} sessão{sess.length>1?"ões":""})
+                  </div>
+                  {sess.slice(0,2).map((s,i)=>(
+                    <div key={i} style={{marginBottom:8,paddingBottom:8,borderBottom:i<sess.length-1?`1px solid ${C.border}`:"none"}}>
+                      <div style={{display:"flex",gap:10,marginBottom:4,flexWrap:"wrap"}}>
+                        <span style={{fontSize:12,color:C.muted}}>📅 {s.data}</span>
+                        <span style={{fontSize:12,color:C.muted}}>👥 {s.tipoAcomp}: {s.acompanhante||"Sozinho"}</span>
+                        <span style={{fontSize:12}}>
+                          {[1,2,3,4,5].map(n=><span key={n} style={{color:n<=s.comprometimento?C.gold:"#333",fontSize:13}}>{n<=s.comprometimento?"★":"☆"}</span>)}
+                          <span style={{color:C.muted,fontSize:11,marginLeft:4}}>{s.comprometimento}/5</span>
+                        </span>
+                      </div>
+                      <div style={{fontSize:12,marginBottom:4}}>
+                        <strong style={{color:C.muted}}>Causas: </strong>
+                        {(s.causas||[]).join(", ")||"–"}
+                        {s.outrosDetalhe&&<span style={{color:C.muted}}> ({s.outrosDetalhe})</span>}
+                      </div>
+                      <div style={{fontSize:12,color:C.muted,lineHeight:1.5}}>{s.relato}</div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+
+            {/* Ficha rápida do operador */}
+            {(()=>{
+              const op = operators?.find(o=>o.re===detalhes.re);
+              if(!op) return null;
+              return(
+                <div style={{marginBottom:16,background:C.bg,borderRadius:10,padding:"14px 16px",border:`1px solid ${C.border}`}}>
+                  <div style={{fontSize:11,color:C.muted,fontWeight:700,marginBottom:10,textTransform:"uppercase",letterSpacing:.5}}>
+                    📋 Ficha do Operador
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                    {[
+                      {l:"Nome",       v:op.nome},
+                      {l:"Função",     v:op.funcao},
+                      {l:"Garagem",    v:op.garagem},
+                      {l:"Admissão",   v:op.admissao},
+                      {l:"Faltas",     v:op.faltas, c:op.faltas>=10?C.red:op.faltas>=5?C.orange:C.green},
+                      {l:"Multas",     v:op.multas, c:op.multas>=5?C.red:op.multas>=3?C.orange:C.green},
+                    ].map(x=>(
+                      <div key={x.l} style={{background:C.surface,borderRadius:7,padding:"8px 10px"}}>
+                        <div style={{fontSize:10,color:C.muted,marginBottom:2}}>{x.l}</div>
+                        <div style={{fontSize:13,fontWeight:600,color:x.c||C.text}}>{x.v||"–"}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Retorno do setor */}
             <div style={{marginBottom:16}}>
               <div style={{fontSize:11,color:C.muted,marginBottom:6,textTransform:"uppercase",letterSpacing:.5,fontWeight:600}}>
                 {detalhes.retorno?"✓ Retorno do Setor (registrado)":"📝 Registrar Retorno do Setor"}
               </div>
               <textarea style={{background:C.bg,border:`1px solid ${detalhes.retorno?C.green:C.border}`,color:C.text,
-                padding:"10px 12px",borderRadius:9,fontSize:13,fontFamily:"'DM Sans',sans-serif",
+                padding:"10px 12px",borderRadius:9,fontSize:13,fontFamily:"'Inter',sans-serif",
                 width:"100%",outline:"none",resize:"vertical",minHeight:90,lineHeight:1.7}}
                 placeholder="Descreva o que foi realizado pelo setor, resultado, observações..."
                 value={retornoText} onChange={e=>setRetornoText(e.target.value)}/>
@@ -2784,7 +3003,7 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators }) => {
 
             <div style={{display:"flex",gap:8}}>
               <button onClick={handleRetornoSave} style={{flex:1,padding:"11px",background:`linear-gradient(135deg,${C.green},${C.accent2})`,
-                color:"#fff",border:"none",borderRadius:10,fontFamily:"'Syne',sans-serif",fontSize:14,fontWeight:700,cursor:"pointer"}}>
+                color:"#fff",border:"none",borderRadius:10,fontFamily:"'Inter',sans-serif",fontSize:14,fontWeight:700,cursor:"pointer"}}>
                 💾 Salvar Retorno e Concluir
               </button>
               <button onClick={()=>setDetalhes(null)} className="abt" style={{padding:"11px 18px"}}>Fechar</button>
@@ -2799,11 +3018,11 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators }) => {
           onClick={()=>setShowModal(false)}>
           <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:18,padding:28,width:"100%",maxWidth:520}}
             onClick={e=>e.stopPropagation()}>
-            <div style={{fontFamily:"'Syne',sans-serif",fontSize:18,fontWeight:700,marginBottom:20}}>+ Nova Tratativa</div>
+            <div style={{fontFamily:"'Inter',sans-serif",fontSize:18,fontWeight:700,marginBottom:20}}>+ Nova Tratativa</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}} className="form-grid-2">
               <div>
                 <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Operador *</div>
-                <select style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,fontFamily:"'DM Sans',sans-serif",width:"100%",outline:"none"}}
+                <select style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none"}}
                   value={newForm.re} onChange={e=>{const op=operators.find(o=>o.re===e.target.value);setNewForm(f=>({...f,re:e.target.value,nome:op?.nome||""}));}}>
                   <option value="">Selecione...</option>
                   {operators.map(o=><option key={o.re} value={o.re}>{o.re} – {o.nome}</option>)}
@@ -2811,14 +3030,14 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators }) => {
               </div>
               <div>
                 <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Área *</div>
-                <select style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,fontFamily:"'DM Sans',sans-serif",width:"100%",outline:"none"}}
+                <select style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none"}}
                   value={newForm.area} onChange={e=>setNewForm(f=>({...f,area:e.target.value,subarea:""}))}>
                   {Object.keys(AREA_ICONS).map(a=><option key={a}>{a}</option>)}
                 </select>
               </div>
               <div>
                 <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Subnível</div>
-                <select style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,fontFamily:"'DM Sans',sans-serif",width:"100%",outline:"none"}}
+                <select style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none"}}
                   value={newForm.subarea} onChange={e=>setNewForm(f=>({...f,subarea:e.target.value}))}>
                   <option value="">Selecione...</option>
                   {(SETORES_MAP[newForm.area]||[]).map(s=><option key={s}>{s}</option>)}
@@ -2826,7 +3045,7 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators }) => {
               </div>
               <div>
                 <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Prazo</div>
-                <input style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,fontFamily:"'DM Sans',sans-serif",width:"100%",outline:"none"}}
+                <input style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none"}}
                   placeholder="dd/mm/aa" value={newForm.prazo} onChange={e=>setNewForm(f=>({...f,prazo:e.target.value}))}/>
               </div>
             </div>
@@ -2845,13 +3064,13 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators }) => {
             </div>
             <div style={{marginBottom:16}}>
               <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Descrição *</div>
-              <textarea style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"10px 12px",borderRadius:8,fontSize:13,fontFamily:"'DM Sans',sans-serif",width:"100%",outline:"none",resize:"vertical",minHeight:80}}
+              <textarea style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"10px 12px",borderRadius:8,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none",resize:"vertical",minHeight:80}}
                 value={newForm.descricao} onChange={e=>setNewForm(f=>({...f,descricao:e.target.value}))} placeholder="Descreva a ação a ser tomada..."/>
             </div>
             <div style={{display:"flex",gap:8}}>
               <button onClick={handleAdd} disabled={!newForm.re||!newForm.descricao}
                 style={{flex:1,padding:"11px",background:newForm.re&&newForm.descricao?`linear-gradient(135deg,${C.accent},${C.accent2})`:`${C.border}`,
-                color:newForm.re&&newForm.descricao?"#000":C.muted,border:"none",borderRadius:10,fontFamily:"'Syne',sans-serif",fontSize:14,fontWeight:700,cursor:"pointer"}}>
+                color:newForm.re&&newForm.descricao?"#000":C.muted,border:"none",borderRadius:10,fontFamily:"'Inter',sans-serif",fontSize:14,fontWeight:700,cursor:"pointer"}}>
                 ✓ Criar Tratativa
               </button>
               <button onClick={()=>setShowModal(false)} className="abt" style={{padding:"11px 18px"}}>Cancelar</button>
@@ -2862,7 +3081,7 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators }) => {
 
       {/* ── Header ── */}
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20,flexWrap:"wrap"}}>
-        <div style={{fontFamily:"'Syne',sans-serif",fontSize:18,fontWeight:700}}>Gestão de Tratativas</div>
+        <div style={{fontFamily:"'Inter',sans-serif",fontSize:18,fontWeight:700}}>Gestão de Tratativas</div>
         <div style={{flex:1}}/>
         <button className="abt" style={{padding:"8px 14px",background:`${C.gold}15`,borderColor:C.gold,color:C.gold}} onClick={exportExcel}>⬇ Excel</button>
         <button className="abt" style={{padding:"8px 18px",background:`${C.green}18`,borderColor:C.green,color:C.green}} onClick={()=>setShowModal(true)}>+ Nova Tratativa</button>
@@ -2888,21 +3107,75 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators }) => {
         ].map(x=>(
           <div key={x.l} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 16px",
             borderTop:`2px solid ${x.c}40`,cursor:"pointer"}} onClick={()=>setFiltStatus(x.l==="Total"?"todos":x.l==="Urgentes"?"urgente":x.l==="Pendentes"?"pendente":x.l==="Em andamento"?"andamento":"concluido")}>
-            <div style={{fontFamily:"'Syne',sans-serif",fontSize:24,fontWeight:800,color:x.c}}>{x.v}</div>
+            <div style={{fontFamily:"'Inter',sans-serif",fontSize:24,fontWeight:800,color:x.c}}>{x.v}</div>
             <div style={{fontSize:11,color:C.muted,marginTop:2}}>{x.l}</div>
           </div>
         ))}
       </div>
 
+      {/* ── Dashboard gráfico por área ── */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:20}}>
+        <div className="card">
+          <div className="ct"><span className="ctd"/>Tratativas por Área</div>
+          <ResponsiveContainer width="100%" height={200}>
+            <PieChart>
+              <Pie data={Object.entries(
+                tratativas.reduce((acc,t)=>{acc[t.area]=(acc[t.area]||0)+1;return acc;},{})
+              ).map(([name,value])=>({name,value}))}
+              cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value">
+                {tratativas.reduce((acc,t)=>{if(!acc.includes(t.area))acc.push(t.area);return acc;},[]).map((_,i)=>(
+                  <Cell key={i} fill={[C.accent,C.accent2,C.purple,C.gold,C.green,C.orange][i%6]}/>
+                ))}
+              </Pie>
+              <Tooltip contentStyle={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8}}/>
+              <Legend/>
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="card">
+          <div className="ct"><span className="ctd"/>Status por Área</div>
+          <div style={{display:"flex",flexDirection:"column",gap:10,padding:"8px 0"}}>
+            {Object.entries(
+              tratativas.reduce((acc,t)=>{
+                if(!acc[t.area])acc[t.area]={area:t.area,pendente:0,andamento:0,concluido:0};
+                acc[t.area][t.status]=(acc[t.area][t.status]||0)+1;
+                return acc;
+              },{})
+            ).map(([area,stats])=>{
+              const tot=(stats.pendente||0)+(stats.andamento||0)+(stats.concluido||0);
+              const pct=tot?Math.round((stats.concluido/tot)*100):0;
+              const ac=AREA_COLORS[area]||C.accent;
+              return(
+                <div key={area} style={{display:"flex",alignItems:"center",gap:10}}>
+                  <span style={{fontSize:14}}>{AREA_ICONS_MAP[area]||"📋"}</span>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}>
+                      <span style={{fontWeight:600}}>{area}</span>
+                      <span style={{color:C.muted,fontSize:11}}>
+                        ✓{stats.concluido||0} · ⏳{stats.pendente||0} · 🔄{stats.andamento||0}
+                      </span>
+                    </div>
+                    <div style={{height:6,background:C.border,borderRadius:3,overflow:"hidden"}}>
+                      <div style={{width:`${pct}%`,height:"100%",background:ac,borderRadius:3,transition:"width .8s ease"}}/>
+                    </div>
+                  </div>
+                  <span style={{fontSize:12,fontWeight:700,color:ac,minWidth:32,textAlign:"right"}}>{pct}%</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
       {/* ── Filtros ── */}
       <div style={{display:"flex",gap:10,marginBottom:20,flexWrap:"wrap",alignItems:"center"}}>
-        <input style={{background:C.card,border:`1px solid ${C.border}`,color:C.text,padding:"9px 14px",borderRadius:10,fontSize:13,fontFamily:"'DM Sans',sans-serif",flex:1,minWidth:160,outline:"none"}}
+        <input style={{background:C.card,border:`1px solid ${C.border}`,color:C.text,padding:"9px 14px",borderRadius:10,fontSize:13,fontFamily:"'Inter',sans-serif",flex:1,minWidth:160,outline:"none"}}
           placeholder="🔍 Buscar RE ou nome..." value={filtRe} onChange={e=>setFiltRe(e.target.value)}/>
-        <select style={{background:C.card,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:10,fontSize:13,fontFamily:"'DM Sans',sans-serif",outline:"none"}}
+        <select style={{background:C.card,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:10,fontSize:13,fontFamily:"'Inter',sans-serif",outline:"none"}}
           value={filtArea} onChange={e=>setFiltArea(e.target.value)}>
           {areas.map(a=><option key={a} value={a}>{a==="todas"?"Todas as áreas":a}</option>)}
         </select>
-        <select style={{background:C.card,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:10,fontSize:13,fontFamily:"'DM Sans',sans-serif",outline:"none"}}
+        <select style={{background:C.card,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:10,fontSize:13,fontFamily:"'Inter',sans-serif",outline:"none"}}
           value={filtStatus} onChange={e=>setFiltStatus(e.target.value)}>
           {[{v:"todos",l:"Todos status"},{v:"pendente",l:"Pendente"},{v:"andamento",l:"Em andamento"},{v:"concluido",l:"Concluído"}].map(s=><option key={s.v} value={s.v}>{s.l}</option>)}
         </select>
@@ -2921,7 +3194,7 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators }) => {
             return(
               <div key={col.status}>
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,paddingBottom:8,borderBottom:`2px solid ${col.color}40`}}>
-                  <span style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:14}}>{col.label}</span>
+                  <span style={{fontFamily:"'Inter',sans-serif",fontWeight:700,fontSize:14}}>{col.label}</span>
                   <span style={{background:`${col.color}20`,color:col.color,borderRadius:"50%",width:22,height:22,
                     display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700}}>{items.length}</span>
                 </div>
@@ -3140,7 +3413,7 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
       {/* Header */}
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20,flexWrap:"wrap"}} className="no-print">
         <div>
-          <div style={{fontFamily:"'Syne',sans-serif",fontSize:18,fontWeight:700}}>Relatórios Gerenciais</div>
+          <div style={{fontFamily:"'Inter',sans-serif",fontSize:18,fontWeight:700}}>Relatórios Gerenciais</div>
           <div style={{fontSize:12,color:C.muted,marginTop:2}}>Gerado em {new Date().toLocaleString("pt-BR")}</div>
         </div>
         <div style={{flex:1}}/>
@@ -3155,7 +3428,7 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
 
       {/* Título para print */}
       <div style={{display:"none",marginBottom:20}} className="rel-print-title">
-        <div style={{fontFamily:"'Syne',sans-serif",fontSize:22,fontWeight:800}}>ELEVAMENTE — Relatório Gerencial</div>
+        <div style={{fontFamily:"'Inter',sans-serif",fontSize:22,fontWeight:800}}>ELEVAMENTE — Relatório Gerencial</div>
         <div style={{fontSize:12,color:"#666"}}>Gerado em {new Date().toLocaleString("pt-BR")} · Uso restrito — Diretoria</div>
       </div>
 
@@ -3184,7 +3457,7 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
             ].map(x=>(
               <div key={x.l} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"18px 20px",borderTop:`3px solid ${x.c}40`}}>
                 <div style={{fontSize:22,marginBottom:8}}>{x.icon}</div>
-                <div style={{fontFamily:"'Syne',sans-serif",fontSize:28,fontWeight:800,color:x.c,lineHeight:1}}>{x.v}</div>
+                <div style={{fontFamily:"'Inter',sans-serif",fontSize:28,fontWeight:800,color:x.c,lineHeight:1}}>{x.v}</div>
                 <div style={{fontSize:12,color:C.muted,marginTop:4}}>{x.l}</div>
               </div>
             ))}
@@ -3206,7 +3479,7 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
               <div style={{display:"flex",gap:12,justifyContent:"center",flexWrap:"wrap",marginTop:8}}>
                 {[{l:"Melhoraram",v:melhoraram,c:C.green},{l:"Avaliação",v:avaliacao,c:C.gold},{l:"Pioraram",v:pioraram,c:C.red},{l:"Aguardando",v:aguardando,c:C.orange}]
                   .map(x=><div key={x.l} style={{textAlign:"center"}}>
-                    <div style={{fontFamily:"'Syne',sans-serif",fontSize:18,fontWeight:800,color:x.c}}>{x.v}</div>
+                    <div style={{fontFamily:"'Inter',sans-serif",fontSize:18,fontWeight:800,color:x.c}}>{x.v}</div>
                     <div style={{fontSize:11,color:C.muted}}>{x.l}</div>
                   </div>)}
               </div>
@@ -3226,7 +3499,7 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
                   <div key={x.l}>
                     <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
                       <span style={{fontSize:12,color:C.muted}}>{x.l}</span>
-                      <span style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:13,color:x.c}}>{x.v}</span>
+                      <span style={{fontFamily:"'Inter',sans-serif",fontWeight:700,fontSize:13,color:x.c}}>{x.v}</span>
                     </div>
                     <div style={{height:5,background:C.border,borderRadius:3,overflow:"hidden"}}>
                       <div style={{width:`${Math.min(x.bar,100)}%`,height:"100%",background:x.c,borderRadius:3,transition:"width 1s ease"}}/>
@@ -3278,13 +3551,13 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
                     const scoreColor=op.score>=30?C.red:op.score>=15?C.orange:C.gold;
                     return(
                       <tr key={op.re+i}>
-                        <td style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:15,color:i<3?[C.gold,C.muted,C.orange][i]:C.muted}}>
+                        <td style={{fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:15,color:i<3?[C.gold,C.muted,C.orange][i]:C.muted}}>
                           {i===0?"🥇":i===1?"🥈":i===2?"🥉":i+1}
                         </td>
                         <td><span className="re-tag">{op.re}</span></td>
                         <td>
                           <div style={{display:"flex",alignItems:"center",gap:8}}>
-                            <div style={{width:30,height:30,borderRadius:8,background:`${ac}20`,color:ac,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,fontFamily:"'Syne',sans-serif",flexShrink:0}}>{initials(op.nome)}</div>
+                            <div style={{width:30,height:30,borderRadius:8,background:`${ac}20`,color:ac,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,fontFamily:"'Inter',sans-serif",flexShrink:0}}>{initials(op.nome)}</div>
                             <span style={{fontSize:12,fontWeight:500}}>{op.nome}</span>
                           </div>
                         </td>
@@ -3298,11 +3571,11 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
                             <div style={{width:50,height:6,background:C.border,borderRadius:3,overflow:"hidden"}}>
                               <div style={{width:`${Math.min(op.score/50*100,100)}%`,height:"100%",background:scoreColor,borderRadius:3}}/>
                             </div>
-                            <span style={{fontFamily:"'Syne',sans-serif",fontWeight:800,color:scoreColor,fontSize:14}}>{op.score}</span>
+                            <span style={{fontFamily:"'Inter',sans-serif",fontWeight:800,color:scoreColor,fontSize:14}}>{op.score}</span>
                           </div>
                         </td>
                         <td><span className="pill" style={{color:stl.color,background:stl.bg,fontSize:10}}>● {stl.label}</span></td>
-                        <td style={{fontFamily:"'Syne',sans-serif",fontWeight:700,color:C.red,fontSize:12}}>
+                        <td style={{fontFamily:"'Inter',sans-serif",fontWeight:700,color:C.red,fontSize:12}}>
                           R$ {perda.toLocaleString("pt-BR",{minimumFractionDigits:2})}
                         </td>
                       </tr>
@@ -3339,7 +3612,7 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
                     <div key={c.name} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:`1px solid ${C.border}20`}}>
                       <div style={{width:8,height:8,borderRadius:"50%",background:[C.accent,C.accent2,C.purple,C.gold,C.orange][i%5],flexShrink:0}}/>
                       <div style={{flex:1,fontSize:13}}>{c.name}</div>
-                      <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:14,color:[C.accent,C.accent2,C.purple,C.gold,C.orange][i%5]}}>{c.value}</div>
+                      <div style={{fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:14,color:[C.accent,C.accent2,C.purple,C.gold,C.orange][i%5]}}>{c.value}</div>
                       <div style={{fontSize:11,color:C.muted,width:36,textAlign:"right"}}>{totalCausas?Math.round(c.value/totalCausas*100):0}%</div>
                     </div>
                   ))}
@@ -3367,7 +3640,7 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
               })}
             </div>
             <div style={{marginTop:16,padding:"12px 14px",background:C.bg,borderRadius:10,textAlign:"center"}}>
-              <div style={{fontFamily:"'Syne',sans-serif",fontSize:32,fontWeight:800,color:compMedio>=4?C.green:compMedio>=3?C.gold:C.red}}>{compMedio}</div>
+              <div style={{fontFamily:"'Inter',sans-serif",fontSize:32,fontWeight:800,color:compMedio>=4?C.green:compMedio>=3?C.gold:C.red}}>{compMedio}</div>
               <div style={{fontSize:12,color:C.muted}}>Comprometimento médio geral</div>
             </div>
           </div>
@@ -3384,7 +3657,7 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
               {l:"Pendentes / Andamento",v:tratativas.filter(t=>t.status!=="concluido").length, c:C.orange},
             ].map(x=>(
               <div key={x.l} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"16px 20px",borderTop:`3px solid ${x.c}40`}}>
-                <div style={{fontFamily:"'Syne',sans-serif",fontSize:28,fontWeight:800,color:x.c}}>{x.v}</div>
+                <div style={{fontFamily:"'Inter',sans-serif",fontSize:28,fontWeight:800,color:x.c}}>{x.v}</div>
                 <div style={{fontSize:12,color:C.muted,marginTop:3}}>{x.l}</div>
               </div>
             ))}
@@ -3402,7 +3675,7 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
                       <span style={{fontSize:18}}>{AREA_ICONS[t.area]}</span>
                       <span style={{fontWeight:600,fontSize:13}}>{t.area}</span>
                       <span style={{marginLeft:"auto",fontSize:12,color:C.muted}}>{t.concluido}/{t.total}</span>
-                      <span style={{fontFamily:"'Syne',sans-serif",fontWeight:800,color:ac,fontSize:13}}>{pct}%</span>
+                      <span style={{fontFamily:"'Inter',sans-serif",fontWeight:800,color:ac,fontSize:13}}>{pct}%</span>
                     </div>
                     <div style={{height:8,background:C.border,borderRadius:4,overflow:"hidden"}}>
                       <div style={{width:`${pct}%`,height:"100%",background:ac,borderRadius:4}}/>
@@ -3500,11 +3773,11 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
                 const ac=avatarColor(op.re);
                 return(
                   <div key={op.re+i} style={{display:"flex",alignItems:"center",gap:12}}>
-                    <div style={{width:36,height:36,borderRadius:10,background:`${ac}20`,color:ac,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:13,flexShrink:0}}>{initials(op.nome)}</div>
+                    <div style={{width:36,height:36,borderRadius:10,background:`${ac}20`,color:ac,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:13,flexShrink:0}}>{initials(op.nome)}</div>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
                         <span style={{fontSize:12,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{op.nome}</span>
-                        <span style={{fontFamily:"'Syne',sans-serif",fontWeight:800,color:C.red,fontSize:13,flexShrink:0,marginLeft:8}}>
+                        <span style={{fontFamily:"'Inter',sans-serif",fontWeight:800,color:C.red,fontSize:13,flexShrink:0,marginLeft:8}}>
                           R$ {perda.toLocaleString("pt-BR",{minimumFractionDigits:2})}
                         </span>
                       </div>
@@ -3553,7 +3826,7 @@ const ParametrosPage = ({ custos, onSave }) => {
 
   const inputStyle = {
     background:C.bg, border:`1px solid ${C.border}`, color:C.text,
-    padding:"10px 14px", borderRadius:9, fontSize:14, fontFamily:"'DM Sans',sans-serif",
+    padding:"10px 14px", borderRadius:9, fontSize:14, fontFamily:"'Inter',sans-serif",
     width:"100%", outline:"none", transition:"border-color .2s",
   };
 
@@ -3584,12 +3857,12 @@ const ParametrosPage = ({ custos, onSave }) => {
       {/* Header */}
       <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:24, flexWrap:"wrap" }}>
         <div>
-          <div style={{ fontFamily:"'Syne',sans-serif", fontSize:20, fontWeight:800 }}>⚙️ Parâmetros Financeiros</div>
+          <div style={{ fontFamily:"'Inter',sans-serif", fontSize:20, fontWeight:800 }}>⚙️ Parâmetros Financeiros</div>
           <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>Configure os valores base para o cálculo de perda financeira dos operadores.</div>
         </div>
         <div style={{ flex:1 }}/>
         <button className="abt" style={{ padding:"8px 16px", color:C.muted, borderColor:C.border }} onClick={handleReset}>↺ Restaurar padrões</button>
-        <button onClick={handleSave} style={{ padding:"10px 24px", borderRadius:10, border:"none", cursor:"pointer", fontFamily:"'Syne',sans-serif", fontSize:14, fontWeight:800,
+        <button onClick={handleSave} style={{ padding:"10px 24px", borderRadius:10, border:"none", cursor:"pointer", fontFamily:"'Inter',sans-serif", fontSize:14, fontWeight:800,
           background: saved ? `linear-gradient(135deg,${C.green},${C.accent2})` : `linear-gradient(135deg,${C.accent},${C.accent2})`, color:"#000", transition:"all .3s" }}>
           {saved ? "✓ Salvo!" : "💾 Salvar Parâmetros"}
         </button>
@@ -3701,7 +3974,7 @@ const ParametrosPage = ({ custos, onSave }) => {
               ].map(x=>(
                 <div key={x.fn} style={{ background:C.bg, border:`1px solid ${x.cor}30`, borderRadius:10, padding:"14px", textAlign:"center" }}>
                   <div style={{ fontSize:11, color:C.muted, marginBottom:6 }}>{x.fn}</div>
-                  <div style={{ fontFamily:"'Syne',sans-serif", fontSize:18, fontWeight:800, color:x.cor }}>
+                  <div style={{ fontFamily:"'Inter',sans-serif", fontSize:18, fontWeight:800, color:x.cor }}>
                     {fmtBRL(x.perda)}
                   </div>
                   <div style={{ fontSize:10, color:C.muted, marginTop:4 }}>por operador</div>
@@ -3741,7 +4014,7 @@ const ParametrosPage = ({ custos, onSave }) => {
                   <tr key={x.k}>
                     <td style={{ fontFamily:"monospace", fontSize:11, color:C.accent }}>{x.k}</td>
                     <td style={{ fontSize:12 }}>{x.l}<br/><span style={{ fontSize:11, color:C.muted }}>{x.d}</span></td>
-                    <td style={{ textAlign:"right", fontFamily:"'Syne',sans-serif", fontWeight:700, color:changed?C.gold:C.text }}>
+                    <td style={{ textAlign:"right", fontFamily:"'Inter',sans-serif", fontWeight:700, color:changed?C.gold:C.text }}>
                       {x.pref==="R$"?fmtBRL(atual):`${atual} ${x.pref}`}
                       {changed && <span style={{ fontSize:10, color:C.gold, marginLeft:4 }}>✎</span>}
                     </td>
@@ -3759,7 +4032,7 @@ const ParametrosPage = ({ custos, onSave }) => {
       {/* Save bottom */}
       <div style={{ textAlign:"center", marginTop:20, marginBottom:8 }}>
         <button onClick={handleSave} style={{ padding:"14px 48px", borderRadius:12, border:"none", cursor:"pointer",
-          fontFamily:"'Syne',sans-serif", fontSize:16, fontWeight:800, letterSpacing:.5,
+          fontFamily:"'Inter',sans-serif", fontSize:16, fontWeight:800, letterSpacing:.5,
           background: saved ? `linear-gradient(135deg,${C.green},${C.accent2})` : `linear-gradient(135deg,${C.accent},${C.accent2})`,
           color:"#000", transition:"all .3s", boxShadow:`0 4px 20px ${C.accent}40` }}>
           {saved ? "✓ Parâmetros Salvos com Sucesso!" : "💾 Salvar Parâmetros"}
@@ -3914,11 +4187,11 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
         onClick={()=>openEdit(a)}>
         <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
           {/* Hora */}
-          <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:compact?13:15,
+          <div style={{fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:compact?13:15,
             color:tp.color,minWidth:44,flexShrink:0}}>{a.hora}</div>
           {/* Avatar */}
           <div style={{width:compact?30:36,height:compact?30:36,borderRadius:8,background:`${ac}20`,color:ac,
-            display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Syne',sans-serif",
+            display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Inter',sans-serif",
             fontWeight:800,fontSize:compact?11:13,flexShrink:0}}>{initials(a.nome)}</div>
           {/* Info */}
           <div style={{flex:1,minWidth:0}}>
@@ -3958,13 +4231,13 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
           onClick={()=>setShowModal(false)}>
           <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:18,padding:28,width:"100%",maxWidth:520,maxHeight:"90vh",overflowY:"auto"}}
             onClick={e=>e.stopPropagation()}>
-            <div style={{fontFamily:"'Syne',sans-serif",fontSize:17,fontWeight:700,marginBottom:20}}>
+            <div style={{fontFamily:"'Inter',sans-serif",fontSize:17,fontWeight:700,marginBottom:20}}>
               {editItem?"✏️ Editar Agendamento":"📅 Novo Agendamento"}
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}} className="form-grid-2">
               <div>
                 <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Operador *</div>
-                <select style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,fontFamily:"'DM Sans',sans-serif",width:"100%",outline:"none"}}
+                <select style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none"}}
                   value={form.re} onChange={e=>{const op=operators.find(o=>o.re===e.target.value);upd("re",e.target.value);if(op)upd("nome",op.nome);}}>
                   <option value="">Selecione...</option>
                   {operators.map(o=><option key={o.re} value={o.re}>{o.re} – {o.nome}</option>)}
@@ -3972,31 +4245,31 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
               </div>
               <div>
                 <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Tipo de encontro *</div>
-                <select style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,fontFamily:"'DM Sans',sans-serif",width:"100%",outline:"none"}}
+                <select style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none"}}
                   value={form.tipo} onChange={e=>upd("tipo",e.target.value)}>
                   {["Mentoria inicial","Acompanhamento","Retorno psicólogo","Retorno ambulatório","Retorno jurídico","Retorno RH"].map(t=><option key={t}>{t}</option>)}
                 </select>
               </div>
               <div>
                 <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Data *</div>
-                <input style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,fontFamily:"'DM Sans',sans-serif",width:"100%",outline:"none"}}
+                <input style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none"}}
                   placeholder="dd/mm/aa" value={form.data} onChange={e=>upd("data",e.target.value)}/>
               </div>
               <div>
                 <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Horário *</div>
-                <input style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,fontFamily:"'DM Sans',sans-serif",width:"100%",outline:"none"}}
+                <input style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none"}}
                   type="time" value={form.hora} onChange={e=>upd("hora",e.target.value)}/>
               </div>
               <div>
                 <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Duração (minutos)</div>
-                <select style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,fontFamily:"'DM Sans',sans-serif",width:"100%",outline:"none"}}
+                <select style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none"}}
                   value={form.durMin} onChange={e=>upd("durMin",parseInt(e.target.value))}>
                   {[30,45,60,90,120].map(d=><option key={d} value={d}>{d} min</option>)}
                 </select>
               </div>
               <div>
                 <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Local</div>
-                <select style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,fontFamily:"'DM Sans',sans-serif",width:"100%",outline:"none"}}
+                <select style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none"}}
                   value={form.local} onChange={e=>upd("local",e.target.value)}>
                   {["Sala RH","RH","Sala 1","Sala 2","Psicologia","Ambulatório","Jurídico","Online","Externo"].map(l=><option key={l}>{l}</option>)}
                 </select>
@@ -4016,13 +4289,13 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
             <div style={{marginBottom:16}}>
               <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Observação</div>
               <textarea style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,
-                fontFamily:"'DM Sans',sans-serif",width:"100%",outline:"none",resize:"vertical",minHeight:60}}
+                fontFamily:"'Inter',sans-serif",width:"100%",outline:"none",resize:"vertical",minHeight:60}}
                 placeholder="Acompanhante, orientações especiais..." value={form.obs} onChange={e=>upd("obs",e.target.value)}/>
             </div>
             <div style={{display:"flex",gap:8}}>
               <button onClick={handleSave} disabled={!form.re||!form.data||!form.hora}
                 style={{flex:1,padding:"11px",background:form.re&&form.data&&form.hora?`linear-gradient(135deg,${C.accent},${C.accent2})`:`${C.border}`,
-                  color:form.re&&form.data&&form.hora?"#000":C.muted,border:"none",borderRadius:10,fontFamily:"'Syne',sans-serif",fontSize:14,fontWeight:700,cursor:"pointer"}}>
+                  color:form.re&&form.data&&form.hora?"#000":C.muted,border:"none",borderRadius:10,fontFamily:"'Inter',sans-serif",fontSize:14,fontWeight:700,cursor:"pointer"}}>
                 {editItem?"💾 Salvar alterações":"📅 Confirmar agendamento"}
               </button>
               {editItem && <button onClick={()=>{handleDelete(editItem.id);setShowModal(false);}}
@@ -4036,7 +4309,7 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
       {/* ── Header ── */}
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20,flexWrap:"wrap"}}>
         <div>
-          <div style={{fontFamily:"'Syne',sans-serif",fontSize:18,fontWeight:700}}>Agenda de Mentorias</div>
+          <div style={{fontFamily:"'Inter',sans-serif",fontSize:18,fontWeight:700}}>Agenda de Mentorias</div>
           <div style={{fontSize:12,color:C.muted,marginTop:2}}>{new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"2-digit",month:"long",year:"numeric"})}</div>
         </div>
         <div style={{flex:1}}/>
@@ -4052,7 +4325,7 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
           ⬇ Excel
         </button>
         <button onClick={openNew} style={{padding:"9px 20px",borderRadius:10,border:"none",cursor:"pointer",
-          background:`linear-gradient(135deg,${C.accent},${C.accent2})`,color:"#000",fontFamily:"'Syne',sans-serif",fontSize:13,fontWeight:700}}>
+          background:`linear-gradient(135deg,${C.accent},${C.accent2})`,color:"#000",fontFamily:"'Inter',sans-serif",fontSize:13,fontWeight:700}}>
           + Agendar
         </button>
       </div>
@@ -4067,7 +4340,7 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
           {v:faltaram,    l:"Faltaram",        c:C.red},
         ].map(x=>(
           <div key={x.l} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 16px",borderTop:`2px solid ${x.c}40`}}>
-            <div style={{fontFamily:"'Syne',sans-serif",fontSize:24,fontWeight:800,color:x.c}}>{x.v}</div>
+            <div style={{fontFamily:"'Inter',sans-serif",fontSize:24,fontWeight:800,color:x.c}}>{x.v}</div>
             <div style={{fontSize:11,color:C.muted,marginTop:2}}>{x.l}</div>
           </div>
         ))}
@@ -4075,12 +4348,12 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
 
       {/* ── Filtros ── */}
       <div style={{display:"flex",gap:10,marginBottom:18,flexWrap:"wrap",alignItems:"center"}}>
-        <select style={{background:C.card,border:`1px solid ${C.border}`,color:C.text,padding:"8px 12px",borderRadius:9,fontSize:12,fontFamily:"'DM Sans',sans-serif",outline:"none"}}
+        <select style={{background:C.card,border:`1px solid ${C.border}`,color:C.text,padding:"8px 12px",borderRadius:9,fontSize:12,fontFamily:"'Inter',sans-serif",outline:"none"}}
           value={filtStatus} onChange={e=>setFiltStatus(e.target.value)}>
           <option value="todos">Todos os status</option>
           {Object.entries(STATUS_AGENDA).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
         </select>
-        <select style={{background:C.card,border:`1px solid ${C.border}`,color:C.text,padding:"8px 12px",borderRadius:9,fontSize:12,fontFamily:"'DM Sans',sans-serif",outline:"none"}}
+        <select style={{background:C.card,border:`1px solid ${C.border}`,color:C.text,padding:"8px 12px",borderRadius:9,fontSize:12,fontFamily:"'Inter',sans-serif",outline:"none"}}
           value={filtTipo} onChange={e=>setFiltTipo(e.target.value)}>
           <option value="todos">Todos os tipos</option>
           {tiposUniq.map(t=><option key={t}>{t}</option>)}
@@ -4100,9 +4373,9 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
                   borderRadius:12,padding:"10px 8px",textAlign:"center",cursor:"pointer",transition:"all .2s"}}
                   onClick={()=>setFiltStatus("todos")}>
                   <div style={{fontSize:10,color:d.isToday?C.accent:C.muted,fontWeight:600,textTransform:"uppercase",marginBottom:4}}>{d.label}</div>
-                  <div style={{fontFamily:"'Syne',sans-serif",fontSize:20,fontWeight:800,color:d.isToday?C.accent:C.text,marginBottom:6}}>{d.num}</div>
+                  <div style={{fontFamily:"'Inter',sans-serif",fontSize:20,fontWeight:800,color:d.isToday?C.accent:C.text,marginBottom:6}}>{d.num}</div>
                   {items.length>0
-                    ? <div style={{fontFamily:"'Syne',sans-serif",fontSize:14,fontWeight:700,color:d.isToday?C.accent:C.accent2}}>{items.length}</div>
+                    ? <div style={{fontFamily:"'Inter',sans-serif",fontSize:14,fontWeight:700,color:d.isToday?C.accent:C.accent2}}>{items.length}</div>
                     : <div style={{fontSize:11,color:C.muted}}>–</div>}
                   {items.length>0&&<div style={{fontSize:9,color:C.muted}}>item{items.length!==1?"s":""}</div>}
                 </div>
@@ -4134,7 +4407,7 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
               {byDate[d].map(a=><CardItem key={a.id} a={a} compact/>)}
             </div>
           ))}
-          {datesSorted.length===0&&<div style={{textAlign:"center",padding:"48px 0",opacity:.5}}><div style={{fontSize:40,marginBottom:10}}>📅</div><div style={{fontFamily:"'Syne',sans-serif",fontSize:16}}>Nenhum agendamento encontrado</div></div>}
+          {datesSorted.length===0&&<div style={{textAlign:"center",padding:"48px 0",opacity:.5}}><div style={{fontSize:40,marginBottom:10}}>📅</div><div style={{fontFamily:"'Inter',sans-serif",fontSize:16}}>Nenhum agendamento encontrado</div></div>}
         </div>
       )}
 
@@ -4156,11 +4429,11 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
                       <td style={{fontSize:12,color:a.data===hoje_str?C.accent:C.muted,fontWeight:a.data===hoje_str?700:400}}>
                         {a.data===hoje_str?"Hoje":a.data}
                       </td>
-                      <td style={{fontFamily:"'Syne',sans-serif",fontWeight:700,color:tp.color,fontSize:13}}>{a.hora}</td>
+                      <td style={{fontFamily:"'Inter',sans-serif",fontWeight:700,color:tp.color,fontSize:13}}>{a.hora}</td>
                       <td><span className="re-tag">{a.re}</span></td>
                       <td>
                         <div style={{display:"flex",alignItems:"center",gap:8}}>
-                          <div style={{width:28,height:28,borderRadius:7,background:`${ac}20`,color:ac,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:10,flexShrink:0}}>{initials(a.nome)}</div>
+                          <div style={{width:28,height:28,borderRadius:7,background:`${ac}20`,color:ac,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:10,flexShrink:0}}>{initials(a.nome)}</div>
                           <span style={{fontSize:12,fontWeight:500}}>{a.nome}</span>
                         </div>
                       </td>
@@ -4222,7 +4495,7 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
                       borderRadius:8,padding:"6px",cursor:items.length>0?"pointer":"default",transition:"all .2s"}}
                       onMouseEnter={e=>items.length>0&&(e.currentTarget.style.borderColor=C.accent)}
                       onMouseLeave={e=>!isToday&&(e.currentTarget.style.borderColor=C.border)}>
-                      <div style={{fontFamily:"'Syne',sans-serif",fontWeight:isToday?800:500,fontSize:13,
+                      <div style={{fontFamily:"'Inter',sans-serif",fontWeight:isToday?800:500,fontSize:13,
                         color:isToday?C.accent:C.text,marginBottom:4}}>{day}</div>
                       {items.slice(0,3).map(a=>{
                         const tp=TIPO_COLORS[a.tipo]||{color:C.accent};
@@ -4252,10 +4525,146 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
   );
 };
 
+// ─── AUDITORIA PAGE ──────────────────────────────────────────────────────────
+const AuditoriaPage = ({ auditLogs, user }) => {
+  const [filtUser, setFiltUser] = useState("todos");
+  const [filtTipo, setFiltTipo] = useState("todos");
+  const [filtSearch, setFiltSearch] = useState("");
+
+  const usuarios = [...new Set(auditLogs.map(l=>l.usuario))];
+  const tipos    = [...new Set(auditLogs.map(l=>l.tipo))];
+
+  const filtered = auditLogs.filter(l=>{
+    const uOk = filtUser==="todos" || l.usuario===filtUser;
+    const tOk = filtTipo==="todos" || l.tipo===filtTipo;
+    const sOk = !filtSearch || l.acao.toLowerCase().includes(filtSearch.toLowerCase()) ||
+                l.usuario.toLowerCase().includes(filtSearch.toLowerCase());
+    return uOk && tOk && sOk;
+  });
+
+  const tipoColor = {
+    "Criou":    C.green,  "Editou":   C.gold,  "Excluiu": C.red,
+    "Acessou":  C.muted,  "Upload":   C.accent, "Login":   C.accent2,
+  };
+
+  const exportAudit = async () => {
+    try {
+      const xlsxLib = await loadXLSX();
+      const rows = filtered.map(l=>({
+        "Data/Hora": l.dataHora, "Usuário": l.usuario, "Perfil": l.perfil,
+        "Tipo": l.tipo, "Ação": l.acao, "Detalhes": l.detalhes||"",
+      }));
+      const ws = xlsxLib.utils.json_to_sheet(rows);
+      ws["!cols"] = [{wch:20},{wch:16},{wch:14},{wch:12},{wch:50},{wch:40}];
+      const wb = xlsxLib.utils.book_new();
+      xlsxLib.utils.book_append_sheet(wb, ws, "Auditoria");
+      xlsxLib.writeFile(wb, `Auditoria_Elevamente_${new Date().toLocaleDateString("pt-BR").replace(/\//g,"-")}.xlsx`);
+    } catch(e) { alert("Erro: "+e.message); }
+  };
+
+  return (
+    <div className="fu d1">
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20,flexWrap:"wrap"}}>
+        <div>
+          <div style={{fontFamily:"'Inter',sans-serif",fontSize:20,fontWeight:700}}>🔍 Auditoria do Sistema</div>
+          <div style={{fontSize:13,color:C.muted,marginTop:2}}>Registro completo de todas as ações realizadas</div>
+        </div>
+        <div style={{flex:1}}/>
+        <button className="abt" style={{background:`${C.gold}15`,borderColor:C.gold,color:C.gold,padding:"8px 16px"}}
+          onClick={exportAudit}>⬇ Exportar Excel</button>
+        <button className="abt" style={{background:`${C.red}15`,borderColor:C.red,color:C.red,padding:"8px 16px"}}
+          onClick={()=>{ if(window.confirm("Limpar histórico de auditoria?")){ localStorage.removeItem("elevamente_audit_v1"); window.location.reload(); }}}>
+          🗑 Limpar
+        </button>
+      </div>
+
+      {/* Stats rápidos */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}} className="men-kpi-grid">
+        {[
+          {l:"Total de ações",  v:auditLogs.length,                              c:C.accent},
+          {l:"Usuários ativos", v:new Set(auditLogs.map(l=>l.usuario)).size,      c:C.green},
+          {l:"Criações",        v:auditLogs.filter(l=>l.tipo==="Criou").length,    c:C.accent2},
+          {l:"Modificações",    v:auditLogs.filter(l=>l.tipo==="Editou").length,   c:C.gold},
+        ].map(x=>(
+          <div key={x.l} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 18px",borderTop:`2px solid ${x.c}40`}}>
+            <div style={{fontFamily:"'Inter',sans-serif",fontSize:24,fontWeight:800,color:x.c,fontVariantNumeric:"tabular-nums"}}>{x.v}</div>
+            <div style={{fontSize:12,color:C.muted,marginTop:3}}>{x.l}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Filtros */}
+      <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
+        <input style={{background:C.card,border:`1px solid ${C.border}`,color:C.text,padding:"9px 14px",
+          borderRadius:10,fontSize:13,fontFamily:"'Inter',sans-serif",flex:1,minWidth:200,outline:"none"}}
+          placeholder="🔍 Buscar ação ou usuário..." value={filtSearch} onChange={e=>setFiltSearch(e.target.value)}/>
+        <select style={{background:C.card,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:10,fontSize:13,fontFamily:"'Inter',sans-serif",outline:"none"}}
+          value={filtUser} onChange={e=>setFiltUser(e.target.value)}>
+          <option value="todos">Todos usuários</option>
+          {usuarios.map(u=><option key={u} value={u}>{u}</option>)}
+        </select>
+        <select style={{background:C.card,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:10,fontSize:13,fontFamily:"'Inter',sans-serif",outline:"none"}}
+          value={filtTipo} onChange={e=>setFiltTipo(e.target.value)}>
+          <option value="todos">Todos os tipos</option>
+          {tipos.map(t=><option key={t} value={t}>{t}</option>)}
+        </select>
+        <span style={{fontSize:12,color:C.muted}}>{filtered.length} registro{filtered.length!==1?"s":""}</span>
+      </div>
+
+      {/* Tabela */}
+      <div className="card">
+        <div className="tw">
+          <table>
+            <thead>
+              <tr>
+                <th>Data/Hora</th><th>Usuário</th><th>Perfil</th>
+                <th>Tipo</th><th>Ação</th><th>Detalhes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length===0 && (
+                <tr><td colSpan={6} style={{textAlign:"center",padding:"40px",color:C.muted}}>
+                  Nenhum registro encontrado
+                </td></tr>
+              )}
+              {filtered.map((l,i)=>{
+                const cor = tipoColor[l.tipo]||C.muted;
+                return(
+                  <tr key={l.id||i}>
+                    <td style={{fontSize:12,color:C.muted,whiteSpace:"nowrap"}}>{l.dataHora}</td>
+                    <td style={{fontWeight:600,fontSize:13}}>{l.usuario}</td>
+                    <td style={{fontSize:12,color:C.muted}}>{l.perfil}</td>
+                    <td>
+                      <span style={{display:"inline-flex",alignItems:"center",padding:"2px 10px",borderRadius:20,
+                        fontSize:11,fontWeight:700,color:cor,background:`${cor}18`,border:`1px solid ${cor}30`}}>
+                        {l.tipo}
+                      </span>
+                    </td>
+                    <td style={{fontSize:13,maxWidth:280}}>{l.acao}</td>
+                    <td style={{fontSize:12,color:C.muted,maxWidth:200}}>{l.detalhes||"–"}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {auditLogs.length===0&&(
+        <div style={{textAlign:"center",padding:"60px 0",opacity:.5}}>
+          <div style={{fontSize:48,marginBottom:12}}>📋</div>
+          <div style={{fontFamily:"'Inter',sans-serif",fontSize:16,fontWeight:700}}>Nenhuma ação registrada ainda</div>
+          <div style={{color:C.muted,fontSize:13,marginTop:6}}>As ações aparecerão aqui conforme o sistema for utilizado</div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const ComingSoon = ({ title }) => (
   <div style={{ display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"60vh",gap:16,opacity:.6 }}>
     <div style={{ fontSize:56 }}>🚧</div>
-    <div style={{ fontFamily:"'Syne',sans-serif",fontSize:22,fontWeight:700 }}>{title}</div>
+    <div style={{ fontFamily:"'Inter',sans-serif",fontSize:22,fontWeight:700 }}>{title}</div>
     <div style={{ color:C.muted,fontSize:14 }}>Será implementado na próxima fase</div>
   </div>
 );
@@ -4279,7 +4688,7 @@ const LoginPage = ({ onLogin }) => {
 
   const inputStyle = {
     background:"#0D1626", border:"1px solid #1E2D42", color:"#E2E8F0",
-    padding:"12px 16px", borderRadius:10, fontSize:14, fontFamily:"'DM Sans',sans-serif",
+    padding:"12px 16px", borderRadius:10, fontSize:14, fontFamily:"'Inter',sans-serif",
     width:"100%", outline:"none", transition:"border-color .2s",
   };
 
@@ -4291,9 +4700,9 @@ const LoginPage = ({ onLogin }) => {
         <div style={{textAlign:"center",marginBottom:36}}>
           <div style={{width:64,height:64,borderRadius:18,background:"linear-gradient(135deg,#00D4FF,#0091FF)",
             display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px",
-            fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:32,color:"#000",
+            fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:32,color:"#000",
             boxShadow:"0 8px 32px #00D4FF30"}}>E</div>
-          <div style={{fontFamily:"'Syne',sans-serif",fontSize:26,fontWeight:800,color:"#E2E8F0",marginBottom:4}}>Elevamente</div>
+          <div style={{fontFamily:"'Inter',sans-serif",fontSize:26,fontWeight:800,color:"#E2E8F0",marginBottom:4}}>Elevamente</div>
           <div style={{fontSize:13,color:"#64748B"}}>Programa Melhora do Operador</div>
         </div>
 
@@ -4302,7 +4711,7 @@ const LoginPage = ({ onLogin }) => {
           boxShadow:"0 20px 60px #00000060",position:"relative",overflow:"hidden"}}>
           <div style={{position:"absolute",top:0,left:0,right:0,height:2,background:"linear-gradient(90deg,#00D4FF,#0091FF,#8B5CF6)"}}/>
 
-          <div style={{fontFamily:"'Syne',sans-serif",fontSize:18,fontWeight:700,marginBottom:6,color:"#E2E8F0"}}>Entrar no sistema</div>
+          <div style={{fontFamily:"'Inter',sans-serif",fontSize:18,fontWeight:700,marginBottom:6,color:"#E2E8F0"}}>Entrar no sistema</div>
           <div style={{fontSize:13,color:"#64748B",marginBottom:24}}>Acesso restrito — colaboradores autorizados</div>
 
           {/* Login */}
@@ -4335,7 +4744,7 @@ const LoginPage = ({ onLogin }) => {
           <button onClick={handleSubmit} disabled={loading||!login||!senha}
             style={{width:"100%",padding:"13px",borderRadius:11,border:"none",cursor:loading||!login||!senha?"not-allowed":"pointer",
               background:login&&senha?"linear-gradient(135deg,#00D4FF,#0091FF)":"#1E2D42",
-              color:login&&senha?"#000":"#64748B",fontFamily:"'Syne',sans-serif",fontSize:15,fontWeight:800,
+              color:login&&senha?"#000":"#64748B",fontFamily:"'Inter',sans-serif",fontSize:15,fontWeight:800,
               transition:"all .2s",opacity:loading?0.7:1}}>
             {loading?"Verificando...":"Entrar →"}
           </button>
@@ -4383,6 +4792,34 @@ export default function App() {
   const [fileSize, setFileSize]     = useState(0);
   const [searchQ, setSearchQ]       = useState("");
   const [showSearch, setShowSearch] = useState(false);
+  const [themeName, setThemeName]   = useState(_themeName);
+  const [auditLogs, setAuditLogs]   = useState(getAuditLogs);
+
+  // ── Apply theme globally ────────────────────────────────────────────────────
+  useEffect(()=>{
+    Object.assign(C, THEMES[themeName] || THEMES.dark);
+    try { localStorage.setItem("elevamente_theme", themeName); } catch {}
+    // force re-render by updating CSS vars on :root
+    const root = document.documentElement;
+    const t = THEMES[themeName]||THEMES.dark;
+    root.style.setProperty("--bg",      t.bg);
+    root.style.setProperty("--surface", t.surface);
+    root.style.setProperty("--card",    t.card);
+    root.style.setProperty("--border",  t.border);
+    root.style.setProperty("--accent",  t.accent);
+    root.style.setProperty("--text",    t.text);
+    root.style.setProperty("--muted",   t.muted);
+    document.body.style.background = t.bg;
+    document.body.style.color      = t.text;
+  },[themeName]);
+
+  const handleThemeChange = (name) => { setThemeName(name); };
+
+  // ── Audit wrapper ───────────────────────────────────────────────────────────
+  const audit = (acao, tipo, detalhes="") => {
+    addAuditLog(user, acao, tipo, detalhes);
+    setAuditLogs(getAuditLogs());
+  };
   const [showAlerts, setShowAlerts] = useState(false);
   const searchRef = useRef();
 
@@ -4405,6 +4842,19 @@ export default function App() {
         if(saved.agenda)     setAgenda(saved.agenda);
         if(saved.custos)     setCustos(saved.custos);
       }
+      // ── Restore Excel data if previously uploaded ──────────────────────────
+      try {
+        const savedExcel = localStorage.getItem("elevamente_excel_data");
+        const savedName  = localStorage.getItem("elevamente_excel_name");
+        const savedSize  = localStorage.getItem("elevamente_excel_size");
+        if (savedExcel && savedName) {
+          const parsed = JSON.parse(savedExcel);
+          setData(parsed);
+          setIsReal(true);
+          setFileName(savedName + " (restaurado)");
+          setFileSize(Number(savedSize)||0);
+        }
+      } catch(e) { /* silent */ }
       setStorageLoaded(true);
     });
   },[]);
@@ -4425,21 +4875,35 @@ export default function App() {
   const sections = [...new Set(NAV.map(n=>n.section))];
   const titles = { dashboard:"Dashboard",operadores:"Operadores",ficha:"Ficha do Operador",
     mentoria:"Mentoria",agenda:"Agenda",tratativas:"Tratativas",relatorios:"Relatórios",
-    parametros:"Parâmetros Financeiros",base:"Base de Dados" };
+    auditoria:"Auditoria do Sistema",parametros:"Parâmetros Financeiros",base:"Base de Dados" };
   const handleUpload = async (file) => {
     setLoading(true);
     try {
       const xlsxLib = await loadXLSX();
       const buf  = await file.arrayBuffer();
       const wb   = xlsxLib.read(buf, { type:"array" });
-      // patch XLSX reference for processExcel
       XLSX = xlsxLib;
       const result = processExcel(wb);
       setData(result);
       setIsReal(true);
       setFileName(file.name);
       setFileSize(file.size);
-      setActive("dashboard"); // jump to dashboard after load
+      // ── Persist Excel data to localStorage ──────────────────────────────────
+      try {
+        localStorage.setItem("elevamente_excel_name", file.name);
+        localStorage.setItem("elevamente_excel_size", String(file.size));
+        localStorage.setItem("elevamente_excel_data", JSON.stringify({
+          operators: result.operators,
+          kpis:      result.kpis,
+          eventosMes:result.eventosMes,
+          causas:    result.causas,
+          sheetSummary: result.sheetSummary,
+          savedAt:   new Date().toLocaleString("pt-BR"),
+        }));
+      } catch(e) { console.warn("localStorage cheio, dados não persistidos:", e); }
+      // ─────────────────────────────────────────────────────────────────────────
+      audit("Upload de base Excel: " + file.name, "Upload");
+      setActive("dashboard");
     } catch(err) {
       console.error(err);
       alert("Erro ao processar o arquivo: " + err.message);
@@ -4459,7 +4923,7 @@ export default function App() {
       <style>{styles}</style>
 
       {/* ── LOGIN GATE ── */}
-      {!user && <LoginPage onLogin={u=>{setUser(u);setActive(u.acesso[0]||"dashboard");}}/>}
+      {!user && <LoginPage onLogin={u=>{setUser(u);setActive(u.acesso[0]||"dashboard");addAuditLog(u,"Login no sistema","Login");}}/>}
 
       {/* ── TOAST NOTIFICATIONS ── */}
       <ToastContainer/>
@@ -4467,7 +4931,7 @@ export default function App() {
       {loading && (
         <div className="loading-overlay">
           <div className="spinner"/>
-          <div style={{ color:C.text,fontFamily:"'Syne',sans-serif",fontWeight:700 }}>Processando planilha…</div>
+          <div style={{ color:C.text,fontFamily:"'Inter',sans-serif",fontWeight:700 }}>Processando planilha…</div>
           <div style={{ color:C.muted,fontSize:13 }}>Lendo abas e calculando indicadores</div>
         </div>
       )}
@@ -4509,7 +4973,7 @@ export default function App() {
                   <div style={{fontSize:10,color:C.muted}}>{(PERFIL_LABELS[user?.perfil]||{label:"–"}).label}{user?.garagem!=="Todas"?` · ${user.garagem}`:""}</div>
                 </div>
               </div>
-              <button onClick={()=>{setUser(null);setActive("dashboard");}}
+              <button onClick={()=>{audit("Logout do sistema","Login");setUser(null);setActive("dashboard");}}
                 style={{width:"100%",padding:"6px",borderRadius:7,background:`${C.red}15`,color:C.red,border:`1px solid ${C.red}25`,
                   fontSize:11,fontWeight:600,cursor:"pointer",textAlign:"center"}}>
                 ⎋ Sair
@@ -4533,7 +4997,7 @@ export default function App() {
               {/* Global search */}
               {showSearch
                 ? <div style={{display:"flex",alignItems:"center",gap:6,background:C.card,border:`1px solid ${C.accent}50`,borderRadius:10,padding:"4px 4px 4px 14px",minWidth:220}}>
-                    <input ref={searchRef} autoFocus style={{background:"transparent",border:"none",color:C.text,fontSize:13,fontFamily:"'DM Sans',sans-serif",outline:"none",flex:1,minWidth:0}}
+                    <input ref={searchRef} autoFocus style={{background:"transparent",border:"none",color:C.text,fontSize:13,fontFamily:"'Inter',sans-serif",outline:"none",flex:1,minWidth:0}}
                       placeholder="Buscar operador, RE..." value={searchQ}
                       onChange={e=>setSearchQ(e.target.value)}
                       onKeyDown={e=>{
@@ -4564,7 +5028,7 @@ export default function App() {
                           onMouseEnter={e=>e.currentTarget.style.background=C.border}
                           onMouseLeave={e=>e.currentTarget.style.background="transparent"}
                           onClick={()=>{setSelectedOp(op);setActive("ficha");setShowSearch(false);setSearchQ("");}}>
-                          <div style={{width:32,height:32,borderRadius:8,background:`${ac}20`,color:ac,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:11,flexShrink:0}}>{initials(op.nome)}</div>
+                          <div style={{width:32,height:32,borderRadius:8,background:`${ac}20`,color:ac,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:11,flexShrink:0}}>{initials(op.nome)}</div>
                           <div style={{flex:1}}>
                             <div style={{fontSize:13,fontWeight:600}}>{op.nome}</div>
                             <div style={{fontSize:11,color:C.muted}}>{op.re} · {op.funcao} · {op.garagem}</div>
@@ -4583,6 +5047,20 @@ export default function App() {
               })()}
 
               <div className="dchip mob-hide">{today}</div>
+
+              {/* Theme switcher */}
+              <div style={{display:"flex",gap:2,background:C.surface,borderRadius:8,padding:3,border:`1px solid ${C.border}`}} className="mob-hide">
+                {Object.entries(THEMES).map(([key,t])=>(
+                  <button key={key} onClick={()=>handleThemeChange(key)}
+                    title={t.label}
+                    style={{padding:"4px 10px",borderRadius:6,border:"none",cursor:"pointer",fontSize:12,fontWeight:600,transition:"all .2s",
+                      background:themeName===key?C.accent:"transparent",
+                      color:themeName===key?"#000":C.muted}}>
+                    {t.label.split(" ")[0]}
+                  </button>
+                ))}
+              </div>
+
               <button className="abt" style={{ padding:"7px 14px",gap:6,display:"flex",alignItems:"center" }} onClick={()=>setActive("base")}>
                 <span style={{ width:8,height:8,borderRadius:"50%",background:isReal?C.green:C.orange,display:"inline-block" }}/>
                 <span className="mob-hide">{isReal?"Base: "+fileName?.split(".")[0]:"Carregar Base"}</span>
@@ -4607,7 +5085,7 @@ export default function App() {
                       <div style={{position:"absolute",top:64,right:8,zIndex:300,background:C.surface,
                         border:`1px solid ${C.border}`,borderRadius:16,padding:16,width:340,
                         boxShadow:"0 8px 40px #00000080",maxHeight:"80vh",overflowY:"auto"}}>
-                        <div style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:15,marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                        <div style={{fontFamily:"'Inter',sans-serif",fontWeight:700,fontSize:15,marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                           <span>🔔 Alertas do Sistema</span>
                           <button onClick={()=>setShowAlerts(false)} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:18}}>✕</button>
                         </div>
@@ -4634,7 +5112,7 @@ export default function App() {
                             return(
                               <div key={a.id} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"10px 12px",marginBottom:6,cursor:"pointer",display:"flex",gap:10,alignItems:"center"}}
                                 onClick={()=>{setActive("agenda");setShowAlerts(false);}}>
-                                <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:13,color:tp.color,minWidth:44}}>{a.hora}</div>
+                                <div style={{fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:13,color:tp.color,minWidth:44}}>{a.hora}</div>
                                 <div>
                                   <div style={{fontSize:12,fontWeight:600}}>{a.nome}</div>
                                   <div style={{fontSize:11,color:C.muted}}>{tp.icon} {a.tipo}</div>
@@ -4688,16 +5166,41 @@ export default function App() {
           {active==="dashboard"   && <DashboardPage data={filteredOps} isReal={isReal} onNav={setActive} agenda={filteredAgenda} tratativas={filteredTrat}/>}
           {active==="operadores"  && <OperadoresPage operators={ops} onVerFicha={(op)=>{ setSelectedOp(op); setActive("ficha"); }}/>}
           {active==="ficha"       && <FichaPage op={selectedOp} onBack={()=>setActive("operadores")} globalCustos={custos} onSaveCustos={setCust}/>}
-          {active==="mentoria"    && <MentoriaPage operators={ops} sessions={sessions} onSave={s=>setSess(prev=>[...prev,s])}/>}
+          {active==="mentoria"    && <MentoriaPage operators={ops} sessions={sessions} onSave={s=>{setSess(prev=>[...prev,s]);audit("Nova sessão de mentoria: "+s.nome+" ("+s.re+")", "Criou");}}/>}
           {active==="agenda"      && <AgendaPage agenda={filteredAgenda} onUpdate={setAgd} onAdd={a=>setAgd(prev=>[...prev,a])} operators={ops}/>}
-          {active==="tratativas"  && <TratativasPage tratativas={filteredTrat} onUpdate={setTrat} onAdd={t=>setTrat(prev=>[...prev,t])} operators={ops}/>}
+          {active==="tratativas"  && <TratativasPage tratativas={filteredTrat} onUpdate={setTrat} onAdd={t=>{setTrat(prev=>[...prev,t]);audit("Nova tratativa: "+t.area+" - "+t.re, "Criou");}} operators={ops} sessions={sessions}/>}
           {active==="relatorios"  && <RelatoriosPage data={filteredOps} sessions={sessions} tratativas={filteredTrat} custos={custos}/>}
+          {active==="auditoria"   && <AuditoriaPage auditLogs={auditLogs} user={user}/>}
           {active==="parametros"  && <ParametrosPage custos={custos} onSave={setCust}/>}
           {active==="base"        && <BasePage fileName={fileName} fileSize={fileSize} sheetSummary={data.sheetSummary||[]} onUpload={handleUpload} onDelete={handleDelete} isReal={isReal}/>}
-          {!["dashboard","operadores","ficha","mentoria","agenda","tratativas","relatorios","parametros","base"].includes(active) && <ComingSoon title={titles[active]}/>}
+          {!["dashboard","operadores","ficha","mentoria","agenda","tratativas","relatorios","auditoria","parametros","base"].includes(active) && <ComingSoon title={titles[active]}/>}
             </>;
           })()}
         </main>
+
+        {/* ── USER STATUS BAR (bottom) ── */}
+        {user && (
+          <div style={{position:"fixed",bottom:0,left:col?64:240,right:0,zIndex:50,
+            background:C.surface,borderTop:`1px solid ${C.border}`,
+            padding:"5px 20px",display:"flex",alignItems:"center",gap:12,fontSize:12,
+            transition:"left .3s"}}>
+            <div style={{width:20,height:20,borderRadius:"50%",
+              background:`linear-gradient(135deg,${(PERFIL_LABELS[user.perfil]||{color:C.accent}).color},${C.accent2})`,
+              display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:"#000",flexShrink:0}}>
+              {user.avatar}
+            </div>
+            <span style={{fontWeight:600,color:C.text}}>{user.nome}</span>
+            <span style={{color:C.muted}}>·</span>
+            <span style={{color:C.muted}}>{(PERFIL_LABELS[user.perfil]||{label:"Usuário"}).label}</span>
+            <div style={{flex:1}}/>
+            <span style={{color:C.muted}}>
+              {new Date().toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"})}
+            </span>
+            <span style={{padding:"1px 8px",borderRadius:4,background:`${C.green}20`,color:C.green,fontSize:10,fontWeight:600}}>
+              ● Online
+            </span>
+          </div>
+        )}
       </div>}
     </>
   );
