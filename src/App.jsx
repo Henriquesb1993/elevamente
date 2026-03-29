@@ -888,7 +888,7 @@ const RESULTADO_LABEL = {
 const NAV = [
   { id:"dashboard",  label:"Dashboard",        icon:"◉",  section:"principal" },
   { id:"operadores", label:"Operadores",        icon:"👥", section:"principal" },
-  { id:"ficha",      label:"Ficha do Operador", icon:"📋", section:"principal" },
+  // ficha removida do menu - acesso via "Ver Ficha" na pagina de Operadores
   { id:"mentoria",   label:"Mentoria",          icon:"💬", section:"acompanhamento" },
   { id:"agenda",     label:"Agenda",            icon:"📅", section:"acompanhamento" },
   { id:"tratativas", label:"Tratativas",        icon:"🔁", section:"gestão" },
@@ -1502,8 +1502,37 @@ const buildEvolutionData = (timeline, dataMentoria) => {
   return Object.values(weeks).sort((a,b)=>order(a.sem)-order(b.sem));
 };
 
+// ─── PDF TEXT SANITIZER (jsPDF only supports WinAnsi/Latin1) ──────────────────
+function sanitizePDF(text) {
+  return String(text || "")
+    .replace(/■/g, ">")
+    .replace(/●/g, "*")
+    .replace(/→/g, "->")
+    .replace(/←/g, "<-")
+    .replace(/↑/g, "^")
+    .replace(/↓/g, "v")
+    .replace(/·/g, "-")
+    .replace(/—/g, " - ")
+    .replace(/–/g, "-")
+    .replace(/…/g, "...")
+    .replace(/"/g, '"').replace(/"/g, '"')
+    .replace(/'/g, "'").replace(/'/g, "'")
+    .replace(/⚠️/g, "[!]").replace(/📋/g, "").replace(/📊/g, "").replace(/💰/g, "").replace(/📅/g, "").replace(/🎯/g, "").replace(/📌/g, "").replace(/🚌/g, "").replace(/⏱/g, "").replace(/💬/g, "").replace(/🔁/g, "").replace(/⚖️/g, "").replace(/🧠/g, "").replace(/👔/g, "").replace(/🏥/g, "")
+    .replace(/[\u{1F600}-\u{1F64F}]/gu, "")
+    .replace(/[\u{1F300}-\u{1F5FF}]/gu, "")
+    .replace(/[\u{1F680}-\u{1F6FF}]/gu, "")
+    .replace(/[\u{1F900}-\u{1F9FF}]/gu, "")
+    .replace(/[\u{2600}-\u{26FF}]/gu, "")
+    .replace(/[\u{2700}-\u{27BF}]/gu, "");
+}
+
+// Sanitize for autoTable: recursively sanitize arrays of arrays
+function sanitizeTableData(data) {
+  return data.map(row => row.map(cell => sanitizePDF(cell)));
+}
+
 // ─── PDF GENERATORS ───────────────────────────────────────────────────────────
-async function gerarPDFFicha(op, perda, evTipoList, totalEvs, evMesList, multasDet, multasVal, relatos, encamins, custos) {
+async function gerarPDFFicha(op, perda, evTipoList, totalEvs, evMesList, multasDet, multasVal, relatos, encamins, custos, tempoCasa) {
   const JsPDF = await loadJsPDF();
   const doc = new JsPDF({ orientation:"portrait", unit:"mm", format:"a4" });
   const W = doc.internal.pageSize.getWidth();
@@ -1511,72 +1540,74 @@ async function gerarPDFFicha(op, perda, evTipoList, totalEvs, evMesList, multasD
 
   const addTitle = (txt, size=11, color=[0,60,120]) => {
     doc.setFontSize(size); doc.setTextColor(...color); doc.setFont(undefined,"bold");
-    doc.text(txt, 14, y); y+=6;
+    doc.text(sanitizePDF(txt), 14, y); y+=6;
   };
   const addLine = (label, value, indent=14) => {
     doc.setFontSize(9); doc.setFont(undefined,"bold"); doc.setTextColor(60,60,60);
-    doc.text(label+":", indent, y);
+    doc.text(sanitizePDF(label)+":", indent, y);
     doc.setFont(undefined,"normal"); doc.setTextColor(0,0,0);
-    doc.text(String(value||"-"), indent+50, y); y+=5;
+    doc.text(sanitizePDF(String(value||"-")), indent+50, y); y+=5;
   };
   const addSection = (title) => {
     y+=3;
     doc.setFillColor(230,240,255); doc.rect(14, y-4, W-28, 7, "F");
     doc.setFontSize(10); doc.setFont(undefined,"bold"); doc.setTextColor(0,60,120);
-    doc.text("■ "+title, 16, y); y+=7;
+    doc.text("> "+sanitizePDF(title), 16, y); y+=7;
   };
   const checkPage = (need=20) => { if(y+need > doc.internal.pageSize.getHeight()-14){ doc.addPage(); y=14; }};
 
   // Header
   doc.setFillColor(10,40,80); doc.rect(0,0,W,22,"F");
   doc.setFontSize(14); doc.setFont(undefined,"bold"); doc.setTextColor(255,255,255);
-  doc.text("PERFIL DO OPERADOR - Relatorio Gerencial", 14, 10);
+  doc.text(sanitizePDF("PERFIL DO OPERADOR - Relatorio Gerencial"), 14, 10);
   doc.setFontSize(9); doc.setFont(undefined,"normal"); doc.setTextColor(180,210,255);
-  doc.text(`RE ${op.re}  ·  ${op.nome}  ·  Gerado em ${new Date().toLocaleString("pt-BR")}  ·  Uso restrito - Diretoria`, 14, 17);
+  doc.text(sanitizePDF(`RE ${op.re}  -  ${op.nome}  -  Gerado em ${new Date().toLocaleString("pt-BR")}  -  Uso restrito - Diretoria`), 14, 17);
   y = 28;
 
   // Identificacao
   addSection("IDENTIFICACAO DO OPERADOR");
-  const info = [["RE (NoREG)",op.re],["Funcao",op.funcao],["Nome",op.nome],["Garagem",op.garagem],["Admissao",op.admissao],["Status",op.status]];
-  doc.autoTable({ startY:y, head:[["Campo","Valor","Campo","Valor"]], body:[
-    [info[0][0],info[0][1],info[1][0],info[1][1]],
-    [info[2][0],info[2][1],info[3][0],info[3][1]],
-    [info[4][0],info[4][1],info[5][0],info[5][1]],
-  ], theme:"grid", headStyles:{fillColor:[0,60,120],textColor:255,fontSize:8}, bodyStyles:{fontSize:9}, margin:{left:14,right:14}, tableWidth:W-28 });
+  const tcPDF = tempoCasa || "-";
+  doc.autoTable({ startY:y, head:[["Campo","Valor","Campo","Valor"]], body:sanitizeTableData([
+    ["RE (NoREG)", String(op.re), "Funcao", String(op.funcao)],
+    ["Nome", String(op.nome), "Garagem", String(op.garagem||"-")],
+    ["Admissao", String(op.admissao||"-"), "Status", String(op.status||"-")],
+    ["Tempo de Casa", String(tcPDF), "", ""],
+  ]), theme:"grid", headStyles:{fillColor:[0,60,120],textColor:255,fontSize:8}, bodyStyles:{fontSize:9}, margin:{left:14,right:14}, tableWidth:W-28 });
   y = doc.lastAutoTable.finalY + 6;
 
   // Leitura gerencial
   checkPage(20);
   addSection("PERFIL DO OPERADOR - LEITURA GERENCIAL");
-  const pontosAtencao=[];
-  if((op.faltas||0)>=10) pontosAtencao.push(`faltas (${op.faltas} dia(s))`);
-  if(multasVal>0) pontosAtencao.push(`multas (${multasDet.length} auto(s), total ${fmtBRL(multasVal)})`);
-  if((op.suspensoes||0)>=1) pontosAtencao.push(`suspensoes (${op.suspensoes})`);
-  if((op.acidentes||0)>=1) pontosAtencao.push(`acidentes com responsabilidade`);
-  if(!op.dataMentoria) pontosAtencao.push("ausencia de mentorias registradas");
-  const leitura = `Operador com tempo de casa referenciado. Foram identificados ${totalEvs} evento(s) na base de prontuarios${evTipoList.length?`, com distribuicao: ${evTipoList.map(e=>`${e.ev}=${e.qtd}`).join("; ")}.`:"."} ${pontosAtencao.length?"Pontos de atencao: "+pontosAtencao.join(", ")+".":""} Perda financeira estimada: ${fmtBRL(perda.totalGeral)}.`;
+  const pontosAtencaoPDF=[];
+  if((op.faltas||0)>=10) pontosAtencaoPDF.push(`faltas (${op.faltas} dia(s))`);
+  if(multasVal>0) pontosAtencaoPDF.push(`multas (${multasDet.length} auto(s), total ${fmtBRL(multasVal)})`);
+  if((op.suspensoes||0)>=1) pontosAtencaoPDF.push(`suspensoes (${op.suspensoes})`);
+  if((op.acidentes||0)>=1) pontosAtencaoPDF.push(`acidentes com responsabilidade`);
+  if(!op.dataMentoria) pontosAtencaoPDF.push("ausencia de mentorias registradas");
+  const distribuicaoPDF = evTipoList.map(e=>`${e.label||EV_LABELS[e.ev]||e.ev}=${e.qtd}`).join("; ");
+  const leitura = `Operador com tempo de casa de ${tcPDF}. Foram identificados ${totalEvs} evento(s) na base de prontuarios${evTipoList.length?`, com distribuicao: ${distribuicaoPDF}.`:"."} ${pontosAtencaoPDF.length?"Pontos de atencao: "+pontosAtencaoPDF.join(", ")+".":""} Perda financeira estimada: ${fmtBRL(perda.totalGeral)}.`;
   doc.setFontSize(9); doc.setFont(undefined,"normal"); doc.setTextColor(40,40,40);
-  const split = doc.splitTextToSize(leitura, W-28);
+  const split = doc.splitTextToSize(sanitizePDF(leitura), W-28);
   doc.text(split, 14, y); y+=split.length*4.5+4;
 
   // Eventos por tipo
   checkPage(30);
-  addSection("EVENTOS POR TIPO (EV) - CONTAGEM");
+  addSection("EVENTOS POR TIPO - CONTAGEM");
   doc.autoTable({ startY:y,
-    head:[["EV","Descricao do EV","Quantidade"]],
-    body:[...evTipoList.map(e=>[e.ev, e.label||e.ev, e.qtd]),["","TOTAL GERAL",totalEvs]],
+    head:[["Cod.","Evento","Quantidade"]],
+    body:sanitizeTableData([...evTipoList.map(e=>[e.ev, String(e.label||EV_LABELS[e.ev]||e.ev), String(e.qtd)]),["","TOTAL GERAL",String(totalEvs)]]),
     theme:"striped", headStyles:{fillColor:[0,60,120],textColor:255,fontSize:9},
     bodyStyles:{fontSize:9}, margin:{left:14,right:14}, tableWidth:W-28,
-    foot:[["","TOTAL GERAL",totalEvs]], footStyles:{fontStyle:"bold",fillColor:[230,240,255]} });
+    foot:[["","TOTAL GERAL",String(totalEvs)]], footStyles:{fontStyle:"bold",fillColor:[230,240,255]} });
   y = doc.lastAutoTable.finalY + 6;
 
   // Eventos por mes
   if(evMesList.length>0){
     checkPage(40);
     addSection("EVENTOS POR MES/ANO");
-    doc.autoTable({ startY:y, head:[["Mes/Ano","F","M","S","T","Total"]],
-      body:[...evMesList.map(m=>[m.mes,m.F||0,m.M||0,m.S||0,m.T||0,m.total||0]),
-        ["TOTAL GERAL",evMesList.reduce((a,m)=>a+(m.F||0),0),evMesList.reduce((a,m)=>a+(m.M||0),0),evMesList.reduce((a,m)=>a+(m.S||0),0),evMesList.reduce((a,m)=>a+(m.T||0),0),totalEvs]],
+    doc.autoTable({ startY:y, head:[["Mes/Ano","Falta","Multa","Suspensao","Atestado","Total"]],
+      body:[...evMesList.map(m=>[String(m.mes),String(m.F||0),String(m.M||0),String(m.S||0),String(m.T||0),String(m.total||0)]),
+        ["TOTAL GERAL",String(evMesList.reduce((a,m)=>a+(m.F||0),0)),String(evMesList.reduce((a,m)=>a+(m.M||0),0)),String(evMesList.reduce((a,m)=>a+(m.S||0),0)),String(evMesList.reduce((a,m)=>a+(m.T||0),0)),String(totalEvs)]],
       theme:"striped", headStyles:{fillColor:[0,60,120],textColor:255,fontSize:9},
       bodyStyles:{fontSize:9}, margin:{left:14,right:14}, tableWidth:W-28 });
     y = doc.lastAutoTable.finalY + 6;
@@ -1590,42 +1621,72 @@ async function gerarPDFFicha(op, perda, evTipoList, totalEvs, evMesList, multasD
     doc.text("Nao ha autos de infracao registrados.", 14, y); y+=8;
   } else {
     doc.autoTable({ startY:y, head:[["Data","Linha","Descricao","Enquadramento","Valor (R$)"]],
-      body:[...multasDet.map(m=>[m.data,m.linha,m.descricao,m.enquadramento,fmtBRL(m.valor)]),
-        ["","","","Total em multas:",fmtBRL(multasVal)]],
+      body:sanitizeTableData([...multasDet.map(m=>[String(m.data),String(m.linha),String(m.descricao),String(m.enquadramento),fmtBRL(m.valor)]),
+        ["","","","Total em multas:",fmtBRL(multasVal)]]),
       theme:"grid", headStyles:{fillColor:[0,60,120],textColor:255,fontSize:8},
       bodyStyles:{fontSize:8.5}, margin:{left:14,right:14}, tableWidth:W-28 });
     y = doc.lastAutoTable.finalY + 6;
   }
 
-  // Perda financeira
+  // Perda financeira detalhada
   doc.addPage(); y=14;
-  addSection("PERDA FINANCEIRA");
+  addSection("PERDA FINANCEIRA - DETALHAMENTO COMPLETO");
   doc.autoTable({ startY:y,
-    head:[["Descricao","Qtd.","Item","Valor Un. (R$)","Total Perda (R$)"]],
-    body:[...perda.itens.map(i=>[i.desc,i.qtd,i.un,fmtBRL(i.valorUn),fmtBRL(i.total)]),
-      ["","","","TOTAL GERAL:",fmtBRL(perda.totalGeral)]],
+    head:[["#","Descricao do Item","Qtd.","Unidade","Valor Un. (R$)","Total (R$)"]],
+    body:sanitizeTableData([...perda.itens.map((item,idx)=>[String(idx+1), String(item.desc), String(item.qtd), String(item.un), fmtBRL(item.valorUn), fmtBRL(item.total)]),
+      ["","","","","TOTAL GERAL:", fmtBRL(perda.totalGeral)]]),
+    theme:"grid", headStyles:{fillColor:[0,60,120],textColor:255,fontSize:7.5},
+    bodyStyles:{fontSize:8}, margin:{left:14,right:14}, tableWidth:W-28,
+    columnStyles:{0:{cellWidth:8},1:{cellWidth:"auto"},2:{cellWidth:12,halign:"center"},3:{cellWidth:25},4:{cellWidth:28,halign:"right"},5:{cellWidth:28,halign:"right"}},
+    didParseCell: function(data) {
+      if(data.row.index===perda.itens.length){data.cell.styles.fontStyle="bold";data.cell.styles.fillColor=[230,240,255];}
+    }
+  });
+  y = doc.lastAutoTable.finalY + 6;
+
+  // Resumo financeiro por categoria
+  checkPage(40);
+  addSection("RESUMO FINANCEIRO POR CATEGORIA");
+  const catFalta = perda.itens.filter(i=>["falta","dsr","ferias","abono","vt","subst","13o","fgts"].includes(i.tipo));
+  const catAtestado = perda.itens.filter(i=>i.tipo==="vr");
+  const catSuspensao = perda.itens.filter(i=>i.tipo==="suspensao");
+  const catMulta = perda.itens.filter(i=>["multa","admulta"].includes(i.tipo));
+  const sumCat = (arr) => arr.reduce((a,x)=>a+(x.total||0),0);
+  doc.autoTable({ startY:y, head:[["Categoria","Itens","Subtotal (R$)","% do Total"]],
+    body:sanitizeTableData([
+      ["Faltas e encargos", String(catFalta.length)+" itens", fmtBRL(sumCat(catFalta)), perda.totalGeral>0?(sumCat(catFalta)/perda.totalGeral*100).toFixed(1)+"%":"0%"],
+      ["Atestados (perda VR)", String(catAtestado.length)+" item", fmtBRL(sumCat(catAtestado)), perda.totalGeral>0?(sumCat(catAtestado)/perda.totalGeral*100).toFixed(1)+"%":"0%"],
+      ["Suspensoes", String(catSuspensao.length)+" item", fmtBRL(sumCat(catSuspensao)), perda.totalGeral>0?(sumCat(catSuspensao)/perda.totalGeral*100).toFixed(1)+"%":"0%"],
+      ["Multas e custos administrativos", String(catMulta.length)+" itens", fmtBRL(sumCat(catMulta)), perda.totalGeral>0?(sumCat(catMulta)/perda.totalGeral*100).toFixed(1)+"%":"0%"],
+      ["TOTAL GERAL", "", fmtBRL(perda.totalGeral), "100%"],
+    ]),
     theme:"grid", headStyles:{fillColor:[0,60,120],textColor:255,fontSize:8},
-    bodyStyles:{fontSize:8.5}, margin:{left:14,right:14}, tableWidth:W-28,
-    footStyles:{fontStyle:"bold"} });
+    bodyStyles:{fontSize:9}, margin:{left:14,right:14}, tableWidth:W-28,
+    didParseCell: function(data) {
+      if(data.row.index===4){data.cell.styles.fontStyle="bold";data.cell.styles.fillColor=[230,240,255];}
+    }
+  });
   y = doc.lastAutoTable.finalY + 6;
 
   // Regra ferias
   checkPage(20);
   doc.setFontSize(8); doc.setTextColor(80,80,80); doc.setFont(undefined,"italic");
-  doc.text("Regra (faltas × ferias): Ate 5→30d · 6-14→24d (perde 6) · 15-23→18d (perde 12) · 24-32→12d (perde 18) · 33+→0d (perde 30).", 14, y); y+=8;
+  doc.text(sanitizePDF("Regra (faltas x ferias): Ate 5=30d | 6-14=24d (perde 6) | 15-23=18d (perde 12) | 24-32=12d (perde 18) | 33+=0d (perde 30)."), 14, y); y+=8;
 
   // Parametros usados
   checkPage(20);
   addSection("PARAMETROS UTILIZADOS NO CALCULO");
   doc.autoTable({ startY:y, head:[["Parametro","Valor"]],
-    body:[
-      ["Valor diario ("+op.funcao+")", fmtBRL(perda.valorDiario)],
+    body:sanitizeTableData([
+      ["Valor diario ("+String(op.funcao)+")", fmtBRL(perda.valorDiario)],
       ["Vale Refeicao (VR/dia)", fmtBRL(custos.valorVR)],
       ["Vale Transporte (VT/dia)", fmtBRL(custos.valorVT||0)],
       ["Hora extra substituto", fmtBRL(custos.valorHoraExtra||0)],
+      ["Horas de substituicao/dia", String(custos.horasSubst||8)+"h"],
+      ["Taxa adm. por auto de infracao", fmtBRL(custos.taxaAdmMulta||0)],
       ["FGTS sobre ferias (%)", (custos.percFGTS||0)+"%"],
-      ["13º proporcional (%)", (custos.perc13||0)+"%"],
-    ], theme:"striped", headStyles:{fillColor:[0,60,120],textColor:255,fontSize:8},
+      ["13o proporcional (%)", (custos.perc13||0)+"%"],
+    ]), theme:"striped", headStyles:{fillColor:[0,60,120],textColor:255,fontSize:8},
     bodyStyles:{fontSize:9}, margin:{left:14,right:14}, tableWidth:W-28 });
   y = doc.lastAutoTable.finalY + 6;
 
@@ -1636,14 +1697,14 @@ async function gerarPDFFicha(op, perda, evTipoList, totalEvs, evMesList, multasD
     relatos.forEach((r,i)=>{
       checkPage(30);
       doc.setFontSize(9); doc.setFont(undefined,"bold"); doc.setTextColor(0,60,120);
-      doc.text(`Sessao ${i+1} - ${r.data} · ${r.tipoAcomp||"Sozinho"}: ${r.acompanhante||"-"} · Comprometimento: ${r.comprometimento}/5`, 14, y); y+=5;
+      doc.text(sanitizePDF(`Sessao ${i+1} - ${r.data} - ${r.tipoAcomp||"Sozinho"}: ${r.acompanhante||"-"} - Comprometimento: ${r.comprometimento}/5`), 14, y); y+=5;
       doc.setFont(undefined,"bold"); doc.setTextColor(60,60,60); doc.text("Causa:", 14, y);
       doc.setFont(undefined,"normal"); doc.setTextColor(0,0,0);
-      const cs=doc.splitTextToSize(r.causa||"-", W-28); doc.text(cs,14,y+4); y+=cs.length*4+6;
+      const cs=doc.splitTextToSize(sanitizePDF(r.causa||"-"), W-28); doc.text(cs,14,y+4); y+=cs.length*4+6;
       checkPage(20);
       doc.setFont(undefined,"bold"); doc.setTextColor(60,60,60); doc.text("Relato:", 14, y);
       doc.setFont(undefined,"normal"); doc.setTextColor(0,0,0);
-      const rs=doc.splitTextToSize(r.relato||"-", W-28); doc.text(rs,14,y+4); y+=rs.length*4+8;
+      const rs=doc.splitTextToSize(sanitizePDF(r.relato||"-"), W-28); doc.text(rs,14,y+4); y+=rs.length*4+8;
     });
   }
 
@@ -1652,12 +1713,12 @@ async function gerarPDFFicha(op, perda, evTipoList, totalEvs, evMesList, multasD
   for(let i=1;i<=pageCount;i++){
     doc.setPage(i);
     doc.setFontSize(7); doc.setTextColor(150,150,150); doc.setFont(undefined,"normal");
-    doc.text(`Gerado em ${new Date().toLocaleString("pt-BR")} - Sistema: Elevamente (IA)`, 14, doc.internal.pageSize.getHeight()-8);
+    doc.text(sanitizePDF(`Gerado em ${new Date().toLocaleString("pt-BR")} - Sistema: Elevamente (IA)`), 14, doc.internal.pageSize.getHeight()-8);
     doc.text(`Pagina ${i} de ${pageCount}`, W-30, doc.internal.pageSize.getHeight()-8);
     doc.text("Uso restrito - Diretoria", W/2, doc.internal.pageSize.getHeight()-8, {align:"center"});
   }
 
-  doc.save(`Ficha_${op.re}_${op.nome.split(" ")[0]}_${new Date().toLocaleDateString("pt-BR").replace(/\//g,"-")}.pdf`);
+  doc.save(sanitizePDF(`Ficha_${op.re}_${op.nome.split(" ")[0]}_${new Date().toLocaleDateString("pt-BR").replace(/\//g,"-")}.pdf`));
 }
 
 async function gerarPDFRelatorio(data, sessions, tratativas, custos) {
@@ -1822,9 +1883,14 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
   const perda     = calcPerdaFinanceira(opEnriched, custos);
   const compColor = !op.comprometimento?C.muted:op.comprometimento>=4?C.green:op.comprometimento>=3?C.gold:C.red;
 
-  // Admission time
+  // Admission time - anos e meses
   const admDate = op.admissao ? (()=>{const p=op.admissao.split("/");return p.length===3?new Date(p[2].length===2?2000+parseInt(p[2]):parseInt(p[2]),parseInt(p[1])-1,parseInt(p[0])):null;})() : null;
-  const tempoCasa = admDate ? ((new Date()-admDate)/(365.25*24*3600*1000)).toFixed(1)+" anos" : "-";
+  const tempoCasa = admDate ? (()=>{
+    const now=new Date(); let anos=now.getFullYear()-admDate.getFullYear(); let meses=now.getMonth()-admDate.getMonth();
+    if(now.getDate()<admDate.getDate()) meses--;
+    if(meses<0){anos--;meses+=12;}
+    return anos>0 ? `${anos} ano${anos>1?"s":""} e ${meses} mes${meses!==1?"es":""}` : `${meses} mes${meses!==1?"es":""}`;
+  })() : "-";
 
   // Events aggregations
   const evTipo={};
@@ -1849,7 +1915,7 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
   if((op.suspensoes||0)>=1)pontosAtencao.push(`suspensoes (${op.suspensoes})`);
   if(op.acidentes>=1)pontosAtencao.push(`acidentes com responsabilidade (${op.acidentes})`);
   if(!op.dataMentoria)pontosAtencao.push("ausencia de mentorias registradas");
-  const leituraGerencial=`Operador com tempo de casa de ${tempoCasa}. Foram identificados ${totalEvs} evento(s) na base de prontuarios${evTipoList.length?`, com distribuicao: ${evTipoList.map(e=>`${e.ev}=${e.qtd}`).join("; ")}.`:"."} ${pontosAtencao.length?"Pontos de atencao: "+pontosAtencao.join(", ")+".":""} Perda financeira estimada: ${fmtBRL(perda.totalGeral)}.`;
+  const leituraGerencial=`Operador com tempo de casa de ${tempoCasa}. Foram identificados ${totalEvs} evento(s) na base de prontuarios${evTipoList.length?`, com distribuicao: ${evTipoList.map(e=>`${e.label||EV_LABELS[e.ev]||e.ev}=${e.qtd}`).join("; ")}.`:"."} ${pontosAtencao.length?"Pontos de atencao: "+pontosAtencao.join(", ")+".":""} Perda financeira estimada: ${fmtBRL(perda.totalGeral)}.`;
 
   const CT2=({active,payload,label})=>{
     if(!active||!payload?.length)return null;
@@ -1884,7 +1950,7 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
         </button>
         <button style={{background:`${C.purple}18`,color:C.purple,border:`1px solid ${C.purple}40`,borderRadius:8,
           padding:"8px 18px",fontSize:13,fontWeight:600,cursor:"pointer"}}
-          onClick={async()=>{try{await gerarPDFFicha(op,perda,evTipoList,totalEvs,evMesList,multasDet,multasVal,relatos,encamins,custos);}catch(e){alert("Erro ao gerar PDF: "+e.message);}}}>
+          onClick={async()=>{try{await gerarPDFFicha(op,perda,evTipoList,totalEvs,evMesList,multasDet,multasVal,relatos,encamins,custos,tempoCasa);}catch(e){alert("Erro ao gerar PDF: "+e.message);}}}>
           📄 Gerar PDF
         </button>
       </div>
