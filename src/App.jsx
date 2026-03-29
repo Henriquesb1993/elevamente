@@ -637,6 +637,13 @@ tr:last-child td{border-bottom:none}
   .ficha-grid{grid-template-columns:repeat(3,1fr)!important}
   .kv{font-size:22px!important}
 }
+/* Kanban mobile: stack columns vertically */
+@media(max-width:768px){
+  .kanban-grid{grid-template-columns:1fr!important}
+  .agenda-week-strip{grid-template-columns:repeat(4,1fr)!important}
+  .dia-filter{flex-wrap:wrap!important}
+  .dia-filter button{padding:4px 8px!important;font-size:10px!important}
+}
 .mob-overlay{display:none;position:fixed;inset:0;background:#000a;z-index:99}
 .mob-menu-btn{display:none;background:${C.card};border:1px solid ${C.border};color:${C.muted};
   width:36px;height:36px;border-radius:8px;cursor:pointer;font-size:18px;
@@ -1182,6 +1189,8 @@ const OperadoresPage = ({ operators, onVerFicha }) => {
   const [tab, setTab]         = useState("todos");
   const [busca, setBusca]     = useState("");
   const [garagem, setGaragem] = useState("todas");
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const searchRef = useRef();
 
   const garagens = [...new Set(operators.map(o=>o.garagem).filter(Boolean))].sort();
 
@@ -1193,6 +1202,11 @@ const OperadoresPage = ({ operators, onVerFicha }) => {
     { id:"andamento",  label:"Avaliação",    count:operators.filter(o=>o.resultado==="andamento").length },
     { id:"aguardando", label:"Aguardando",   count:operators.filter(o=>o.status==="aguardando").length },
   ];
+
+  // Autocomplete suggestions (max 5)
+  const suggestions = busca.length>=1 ? operators.filter(op =>
+    op.nome.toLowerCase().includes(busca.toLowerCase()) || op.re.toLowerCase().includes(busca.toLowerCase())
+  ).slice(0,5) : [];
 
   const lista = operators.filter(op => {
     const bOk = !busca || op.nome.toLowerCase().includes(busca.toLowerCase()) || op.re.toLowerCase().includes(busca.toLowerCase());
@@ -1207,7 +1221,35 @@ const OperadoresPage = ({ operators, onVerFicha }) => {
   return (
     <div className="fu d1">
       <div className="search-bar">
-        <input className="search-input" placeholder="🔍  Buscar nome ou RE…" value={busca} onChange={e=>setBusca(e.target.value)}/>
+        <div style={{flex:1,minWidth:200,position:"relative"}} ref={searchRef}>
+          <input className="search-input" style={{width:"100%"}} placeholder="🔍  Buscar nome ou RE…" value={busca}
+            onChange={e=>{setBusca(e.target.value);setShowSuggestions(true);}}
+            onFocus={()=>setShowSuggestions(true)}
+            onBlur={()=>setTimeout(()=>setShowSuggestions(false),200)}/>
+          {showSuggestions && suggestions.length>0 && busca.length>=1 && (
+            <div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:50,background:C.surface,border:`1px solid ${C.border}`,
+              borderRadius:"0 0 12px 12px",boxShadow:"0 8px 24px #0008",maxHeight:280,overflowY:"auto"}}>
+              {suggestions.map(op=>{
+                const ac=avatarColor(op.re);
+                return(
+                  <div key={op.re} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",cursor:"pointer",
+                    borderBottom:`1px solid ${C.border}`,transition:"background .15s"}}
+                    onMouseEnter={e=>e.currentTarget.style.background=`${C.accent}15`}
+                    onMouseLeave={e=>e.currentTarget.style.background="transparent"}
+                    onMouseDown={()=>{onVerFicha&&onVerFicha(op);setBusca("");setShowSuggestions(false);}}>
+                    <div style={{width:32,height:32,borderRadius:8,background:`${ac}20`,color:ac,display:"flex",alignItems:"center",
+                      justifyContent:"center",fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:11,flexShrink:0}}>{initials(op.nome)}</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{op.nome}</div>
+                      <div style={{fontSize:11,color:C.muted}}>{op.re} · {op.funcao} · {op.garagem}</div>
+                    </div>
+                    <span style={{fontSize:10,color:C.accent,fontWeight:600}}>Ver Ficha →</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
         <select className="filter-sel" value={garagem} onChange={e=>setGaragem(e.target.value)}>
           <option value="todas">Todas as Garagens</option>
           {garagens.map(g=><option key={g} value={g}>{g}</option>)}
@@ -1502,9 +1544,14 @@ const buildEvolutionData = (timeline, dataMentoria) => {
   return Object.values(weeks).sort((a,b)=>order(a.sem)-order(b.sem));
 };
 
-// ─── PDF TEXT SANITIZER (jsPDF only supports WinAnsi/Latin1) ──────────────────
+// ─── PDF TEXT SANITIZER (jsPDF default font only supports WinAnsi/Latin1) ─────
 function sanitizePDF(text) {
   return String(text || "")
+    // Replace non-breaking spaces and special whitespace
+    .replace(/\u00A0/g, " ")
+    .replace(/\u2009/g, " ")
+    .replace(/\u202F/g, " ")
+    // Replace typographic symbols
     .replace(/■/g, ">")
     .replace(/●/g, "*")
     .replace(/→/g, "->")
@@ -1515,15 +1562,16 @@ function sanitizePDF(text) {
     .replace(/—/g, " - ")
     .replace(/–/g, "-")
     .replace(/…/g, "...")
-    .replace(/"/g, '"').replace(/"/g, '"')
-    .replace(/'/g, "'").replace(/'/g, "'")
-    .replace(/⚠️/g, "[!]").replace(/📋/g, "").replace(/📊/g, "").replace(/💰/g, "").replace(/📅/g, "").replace(/🎯/g, "").replace(/📌/g, "").replace(/🚌/g, "").replace(/⏱/g, "").replace(/💬/g, "").replace(/🔁/g, "").replace(/⚖️/g, "").replace(/🧠/g, "").replace(/👔/g, "").replace(/🏥/g, "")
-    .replace(/[\u{1F600}-\u{1F64F}]/gu, "")
-    .replace(/[\u{1F300}-\u{1F5FF}]/gu, "")
-    .replace(/[\u{1F680}-\u{1F6FF}]/gu, "")
-    .replace(/[\u{1F900}-\u{1F9FF}]/gu, "")
-    .replace(/[\u{2600}-\u{26FF}]/gu, "")
-    .replace(/[\u{2700}-\u{27BF}]/gu, "");
+    .replace(/\u201C/g, '"').replace(/\u201D/g, '"')
+    .replace(/\u2018/g, "'").replace(/\u2019/g, "'")
+    .replace(/▲/g, "")
+    // Remove ALL emoji (comprehensive ranges)
+    .replace(/[\u{1F000}-\u{1FFFF}]/gu, "")
+    .replace(/[\u{2600}-\u{27BF}]/gu, "")
+    .replace(/[\u{FE00}-\u{FE0F}]/gu, "")
+    .replace(/[\u{200D}]/gu, "")
+    // Strip accents: convert to ASCII equivalents
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
 // Sanitize for autoTable: recursively sanitize arrays of arrays
@@ -1532,7 +1580,7 @@ function sanitizeTableData(data) {
 }
 
 // ─── PDF GENERATORS ───────────────────────────────────────────────────────────
-async function gerarPDFFicha(op, perda, evTipoList, totalEvs, evMesList, multasDet, multasVal, relatos, encamins, custos, tempoCasa) {
+async function gerarPDFFicha(op, perda, evTipoList, totalEvs, evMesList, multasDet, multasVal, relatos, encamins, custos, tempoCasa, timeline) {
   const JsPDF = await loadJsPDF();
   const doc = new JsPDF({ orientation:"portrait", unit:"mm", format:"a4" });
   const W = doc.internal.pageSize.getWidth();
@@ -1573,6 +1621,16 @@ async function gerarPDFFicha(op, perda, evTipoList, totalEvs, evMesList, multasD
     ["Admissao", String(op.admissao||"-"), "Status", String(op.status||"-")],
     ["Tempo de Casa", String(tcPDF), "", ""],
   ]), theme:"grid", headStyles:{fillColor:[0,60,120],textColor:255,fontSize:8}, bodyStyles:{fontSize:9}, margin:{left:14,right:14}, tableWidth:W-28 });
+  y = doc.lastAutoTable.finalY + 6;
+
+  // KPIs do operador (como na tela)
+  checkPage(20);
+  addSection("INDICADORES DO OPERADOR");
+  doc.autoTable({ startY:y, head:[["Faltas","Multas","Suspensoes","Atestados","Acidentes","Mentoria","Comprometimento"]],
+    body:[[String(op.faltas||0),String(op.multas||0),String(op.suspensoes||0),String(op.atestados||0),String(op.acidentes||0),
+      sanitizePDF(op.dataMentoria||"Sem registro"),op.comprometimento?op.comprometimento+"/5":"N/A"]],
+    theme:"grid", headStyles:{fillColor:[0,60,120],textColor:255,fontSize:8},
+    bodyStyles:{fontSize:10,halign:"center",fontStyle:"bold"}, margin:{left:14,right:14}, tableWidth:W-28 });
   y = doc.lastAutoTable.finalY + 6;
 
   // Leitura gerencial
@@ -1705,6 +1763,37 @@ async function gerarPDFFicha(op, perda, evTipoList, totalEvs, evMesList, multasD
       doc.setFont(undefined,"bold"); doc.setTextColor(60,60,60); doc.text("Relato:", 14, y);
       doc.setFont(undefined,"normal"); doc.setTextColor(0,0,0);
       const rs=doc.splitTextToSize(sanitizePDF(r.relato||"-"), W-28); doc.text(rs,14,y+4); y+=rs.length*4+8;
+    });
+  }
+
+  // Timeline de eventos
+  if(timeline && timeline.length>0){
+    doc.addPage(); y=14;
+    addSection("TIMELINE DE EVENTOS");
+    const tlRows = timeline.slice(0,50).map(ev=>[
+      sanitizePDF(ev.data),
+      sanitizePDF(ev.ev),
+      sanitizePDF(ev.label||EV_LABELS[ev.ev]||ev.ev),
+      sanitizePDF(ev.historico||"-")
+    ]);
+    doc.autoTable({ startY:y, head:[["Data","Cod.","Evento","Historico/Observacao"]],
+      body:tlRows,
+      theme:"striped", headStyles:{fillColor:[0,60,120],textColor:255,fontSize:8},
+      bodyStyles:{fontSize:8}, margin:{left:14,right:14}, tableWidth:W-28,
+      columnStyles:{0:{cellWidth:22},1:{cellWidth:10},2:{cellWidth:30},3:{cellWidth:"auto"}} });
+    y = doc.lastAutoTable.finalY + 6;
+  }
+
+  // Encaminhamentos
+  if(encamins && encamins.length>0){
+    checkPage(30);
+    addSection("ENCAMINHAMENTOS");
+    encamins.forEach((enc,i)=>{
+      checkPage(15);
+      doc.setFontSize(9); doc.setFont(undefined,"bold"); doc.setTextColor(0,60,120);
+      doc.text(sanitizePDF(`${i+1}. ${enc.area} - ${enc.descricao} (${enc.data})`), 14, y); y+=5;
+      doc.setFont(undefined,"normal"); doc.setTextColor(60,60,60);
+      doc.text(sanitizePDF(`Status: ${enc.status} | Retorno: ${enc.retorno||"Aguardando"}`), 14, y); y+=6;
     });
   }
 
@@ -1950,7 +2039,7 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
         </button>
         <button style={{background:`${C.purple}18`,color:C.purple,border:`1px solid ${C.purple}40`,borderRadius:8,
           padding:"8px 18px",fontSize:13,fontWeight:600,cursor:"pointer"}}
-          onClick={async()=>{try{await gerarPDFFicha(op,perda,evTipoList,totalEvs,evMesList,multasDet,multasVal,relatos,encamins,custos,tempoCasa);}catch(e){alert("Erro ao gerar PDF: "+e.message);}}}>
+          onClick={async()=>{try{await gerarPDFFicha(op,perda,evTipoList,totalEvs,evMesList,multasDet,multasVal,relatos,encamins,custos,tempoCasa,timeline);}catch(e){alert("Erro ao gerar PDF: "+e.message);}}}>
           📄 Gerar PDF
         </button>
       </div>
@@ -2900,7 +2989,7 @@ const TRAT_ST_MAP = {
 };
 
 // ─── TRATATIVAS PAGE ──────────────────────────────────────────────────────────
-const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions }) => {
+const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions, onVerFicha }) => {
   const [tab, setTab]         = useState("kanban"); // kanban | lista
   const [filtArea, setFiltArea] = useState("todas");
   const [filtStatus, setFiltStatus] = useState("todos");
@@ -2933,19 +3022,52 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions }) =>
   };
 
   const handleRetornoSave = () => {
-    onUpdate(tratativas.map(t => t.id===detalhes.id ? {...t, retorno:retornoText, status:"concluido"} : t));
-    toast(`Tratativa de ${detalhes.area} concluida!`, "success");
+    if(!retornoText.trim()){toast("Preencha o retorno antes de salvar!","error");return;}
+    const currentStatus = modalStatus || detalhes.status;
+    // Only allow conclude if currently "andamento"
+    const newStatus = currentStatus==="andamento" ? "concluido" : currentStatus;
+    onUpdate(tratativas.map(t => t.id===detalhes.id ? {...t, retorno:retornoText, status:newStatus} : t));
+    toast(newStatus==="concluido"?`Tratativa de ${detalhes.area} concluida!`:`Retorno salvo para ${detalhes.area}!`, "success");
     setDetalhes(null);
     setRetornoText("");
   };
 
+  // Enforce status flow: pendente -> andamento -> concluido
+  const handleStatusFlow = (id, newStatus) => {
+    const t = tratativas.find(x=>x.id===id);
+    if(!t) return;
+    // Cannot skip from pendente to concluido
+    if(t.status==="pendente" && newStatus==="concluido"){
+      toast("Mude para 'Em andamento' antes de concluir!","error");
+      return;
+    }
+    handleStatusChange(id, newStatus);
+  };
+
+  // Auto-calculate prazo: creation date + 5 days
+  const calcPrazo = () => {
+    const d = new Date();
+    d.setDate(d.getDate() + 5);
+    const pad = (n) => String(n).padStart(2,"0");
+    return `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${String(d.getFullYear()).slice(-2)}`;
+  };
+  // Check if prazo is overdue
+  const isPrazoVencido = (prazo) => {
+    if(!prazo) return false;
+    const p=prazo.split("/"); if(p.length<3) return false;
+    const prazoDate=new Date(p[2].length===2?2000+parseInt(p[2]):parseInt(p[2]),parseInt(p[1])-1,parseInt(p[0]));
+    return prazoDate < new Date(new Date().setHours(0,0,0,0));
+  };
+
   const handleAdd = () => {
+    if(!newForm.prioridade){toast("Selecione uma prioridade!","error");return;}
     const op = operators.find(o=>o.re===newForm.re);
-    const t = { ...newForm, id: Date.now(), nome: op?.nome||newForm.re, data: new Date().toLocaleDateString("pt-BR"), status:"pendente", retorno:"" };
+    const prazo = newForm.prazo || calcPrazo();
+    const t = { ...newForm, prazo, id: Date.now(), nome: op?.nome||newForm.re, data: new Date().toLocaleDateString("pt-BR"), status:"pendente", retorno:"" };
     onAdd(t);
     toast(`Nova tratativa criada para ${t.nome}!`, "info");
     setShowModal(false);
-    setNewForm({ re:"", nome:"", area:"RH", subarea:"", prazo:"", prioridade:"media", descricao:"" });
+    setNewForm({ re:"", nome:"", area:"RH", subarea:"", prazo:"", prioridade:"", descricao:"" });
   };
 
   const exportExcel = async () => {
@@ -2968,11 +3090,12 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions }) =>
     const pr = PRIOR_MAP[t.prioridade]||PRIOR_MAP.media;
     const st = TRAT_ST_MAP[t.status];
     const ac = AREA_COLORS[t.area]||C.accent;
+    const vencido = isPrazoVencido(t.prazo) && t.status!=="concluido";
     return (
-      <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 16px",
+      <div style={{background:C.card,border:`1px solid ${vencido?C.red+"60":C.border}`,borderRadius:12,padding:"14px 16px",
         marginBottom:10,cursor:"pointer",transition:"all .2s",borderLeft:`3px solid ${ac}`}}
         onMouseEnter={e=>e.currentTarget.style.borderColor=`${ac}80`}
-        onMouseLeave={e=>e.currentTarget.style.borderLeft=`3px solid ${ac}`}
+        onMouseLeave={e=>{e.currentTarget.style.borderColor=vencido?C.red+"60":C.border;e.currentTarget.style.borderLeft=`3px solid ${ac}`;}}
         onClick={()=>{ setDetalhes(t); setRetornoText(t.retorno||""); setModalStatus(t.status); }}>
         <div style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:8}}>
           <div style={{fontSize:20,flexShrink:0}}>{AREA_ICONS[t.area]}</div>
@@ -2980,13 +3103,18 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions }) =>
             <div style={{fontWeight:600,fontSize:13,marginBottom:2}}>{t.descricao.length>55?t.descricao.slice(0,55)+"…":t.descricao}</div>
             <div style={{fontSize:11,color:C.muted}}><span className="re-tag" style={{fontSize:10,padding:"1px 5px"}}>{t.re}</span> {t.nome}</div>
           </div>
+          <div style={{fontSize:10,fontWeight:700,color:ac,background:`${ac}18`,padding:"2px 8px",borderRadius:6,whiteSpace:"nowrap",flexShrink:0}}>
+            {t.area}
+          </div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
           <span className="pill" style={{color:pr.color,background:pr.bg,fontSize:10}}>▲ {pr.label}</span>
-          {t.prazo&&<span style={{fontSize:10,color:C.muted}}>📅 {t.prazo}</span>}
+          {t.prazo&&<span style={{fontSize:10,color:vencido?C.red:C.muted,fontWeight:vencido?700:400}}>
+            📅 {t.prazo}{vencido?" (VENCIDO)":""}
+          </span>}
           <div style={{marginLeft:"auto",display:"flex",gap:4}}>
             {["pendente","andamento","concluido"].map(s=>(
-              <button key={s} onClick={e=>{e.stopPropagation();handleStatusChange(t.id,s);}}
+              <button key={s} onClick={e=>{e.stopPropagation();handleStatusFlow(t.id,s);}}
                 style={{padding:"2px 7px",borderRadius:5,fontSize:10,fontWeight:600,cursor:"pointer",border:`1px solid ${t.status===s?TRAT_ST_MAP[s].color:C.border}`,
                   background:t.status===s?TRAT_ST_MAP[s].bg:"transparent",color:t.status===s?TRAT_ST_MAP[s].color:C.muted}}>
                 {s==="pendente"?"⏳":s==="andamento"?"🔄":"✓"}
@@ -3099,11 +3227,11 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions }) =>
                 value={retornoText} onChange={e=>setRetornoText(e.target.value)}/>
             </div>
 
-            {/* Status buttons */}
+            {/* Status buttons - enforce flow */}
             <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
               {["pendente","andamento","concluido"].map(s=>{
                 const st=TRAT_ST_MAP[s];
-                return(<button key={s} onClick={()=>handleStatusChange(detalhes.id,s)}
+                return(<button key={s} onClick={()=>handleStatusFlow(detalhes.id,s)}
                   style={{flex:1,padding:"9px",borderRadius:9,border:`1px solid ${modalStatus===s?st.color:C.border}`,
                   background:modalStatus===s?st.bg:"transparent",color:modalStatus===s?st.color:C.muted,
                   fontSize:12,fontWeight:600,cursor:"pointer",transition:"all .2s"}}>
@@ -3112,10 +3240,22 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions }) =>
               })}
             </div>
 
-            <div style={{display:"flex",gap:8}}>
-              <button onClick={handleRetornoSave} style={{flex:1,padding:"11px",background:`linear-gradient(135deg,${C.green},${C.accent2})`,
-                color:"#fff",border:"none",borderRadius:10,fontFamily:"'Inter',sans-serif",fontSize:14,fontWeight:700,cursor:"pointer"}}>
-                💾 Salvar Retorno e Concluir
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              {(()=>{
+                const op=operators?.find(o=>o.re===detalhes.re);
+                return op ? (
+                  <button onClick={()=>{setDetalhes(null);/* navigate to ficha via window event */
+                    onVerFicha&&onVerFicha(op);}}
+                    style={{padding:"11px 16px",background:`${C.purple}18`,color:C.purple,border:`1px solid ${C.purple}40`,
+                    borderRadius:10,fontSize:13,fontWeight:600,cursor:"pointer"}}>
+                    📋 Ver Ficha do Operador
+                  </button>
+                ) : null;
+              })()}
+              <button onClick={handleRetornoSave} style={{flex:1,padding:"11px",
+                background:modalStatus==="andamento"?`linear-gradient(135deg,${C.green},${C.accent2})`:`linear-gradient(135deg,${C.accent},${C.accent2})`,
+                color:modalStatus==="andamento"?"#fff":"#000",border:"none",borderRadius:10,fontFamily:"'Inter',sans-serif",fontSize:14,fontWeight:700,cursor:"pointer"}}>
+                {modalStatus==="andamento"?"💾 Salvar Retorno e Concluir":"💾 Salvar Retorno"}
               </button>
               <button onClick={()=>setDetalhes(null)} className="abt" style={{padding:"11px 18px"}}>Fechar</button>
             </div>
@@ -3161,16 +3301,18 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions }) =>
               </div>
             </div>
             <div style={{marginBottom:12}}>
-              <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Prioridade</div>
+              <div style={{fontSize:11,color:newForm.prioridade?C.muted:C.red,marginBottom:4,fontWeight:newForm.prioridade?400:600}}>Prioridade *</div>
               <div style={{display:"flex",gap:8}}>
-                {Object.entries(PRIOR_MAP).map(([k,v])=>(
+                {[["alta","Alta"],["media","Media"],["baixa","Baixa"]].map(([k,label])=>{
+                  const v=PRIOR_MAP[k];
+                  return(
                   <button key={k} onClick={()=>setNewForm(f=>({...f,prioridade:k}))}
                     style={{flex:1,padding:"7px",borderRadius:8,border:`1px solid ${newForm.prioridade===k?v.color:C.border}`,
                     background:newForm.prioridade===k?v.bg:"transparent",color:newForm.prioridade===k?v.color:C.muted,
                     fontSize:12,fontWeight:600,cursor:"pointer"}}>
-                    {v.label}
+                    {label}
                   </button>
-                ))}
+                );})}
               </div>
             </div>
             <div style={{marginBottom:16}}>
@@ -3179,9 +3321,9 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions }) =>
                 value={newForm.descricao} onChange={e=>setNewForm(f=>({...f,descricao:e.target.value}))} placeholder="Descreva a acao a ser tomada..."/>
             </div>
             <div style={{display:"flex",gap:8}}>
-              <button onClick={handleAdd} disabled={!newForm.re||!newForm.descricao}
-                style={{flex:1,padding:"11px",background:newForm.re&&newForm.descricao?`linear-gradient(135deg,${C.accent},${C.accent2})`:`${C.border}`,
-                color:newForm.re&&newForm.descricao?"#000":C.muted,border:"none",borderRadius:10,fontFamily:"'Inter',sans-serif",fontSize:14,fontWeight:700,cursor:"pointer"}}>
+              <button onClick={handleAdd} disabled={!newForm.re||!newForm.descricao||!newForm.prioridade}
+                style={{flex:1,padding:"11px",background:newForm.re&&newForm.descricao&&newForm.prioridade?`linear-gradient(135deg,${C.accent},${C.accent2})`:`${C.border}`,
+                color:newForm.re&&newForm.descricao&&newForm.prioridade?"#000":C.muted,border:"none",borderRadius:10,fontFamily:"'Inter',sans-serif",fontSize:14,fontWeight:700,cursor:"pointer"}}>
                 ✓ Criar Tratativa
               </button>
               <button onClick={()=>setShowModal(false)} className="abt" style={{padding:"11px 18px"}}>Cancelar</button>
@@ -3257,7 +3399,8 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions }) =>
               const pct=tot?Math.round((stats.concluido/tot)*100):0;
               const ac=AREA_COLORS[area]||C.accent;
               return(
-                <div key={area} style={{display:"flex",alignItems:"center",gap:10}}>
+                <div key={area} style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",padding:"4px 0",borderRadius:8,transition:"all .2s"}}
+                  onClick={()=>{setFiltArea(area);setTab("kanban");}}>
                   <span style={{fontSize:14}}>{AREA_ICONS_MAP[area]||"📋"}</span>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}>
@@ -3295,7 +3438,7 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions }) =>
 
       {/* ── KANBAN VIEW ── */}
       {tab==="kanban"&&(
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:16}}>
+        <div className="kanban-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:16}}>
           {[
             {status:"pendente",  label:"⏳ Pendente",      color:C.red},
             {status:"andamento", label:"🔄 Em andamento",  color:C.gold},
@@ -3347,7 +3490,7 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions }) =>
                         </span>
                       </td>
                       <td style={{fontSize:12,color:C.muted,maxWidth:200}}>{t.descricao.length>50?t.descricao.slice(0,50)+"…":t.descricao}</td>
-                      <td style={{fontSize:12,color:C.muted,whiteSpace:"nowrap"}}>{t.prazo||"-"}</td>
+                      <td style={{fontSize:12,color:isPrazoVencido(t.prazo)&&t.status!=="concluido"?C.red:C.muted,fontWeight:isPrazoVencido(t.prazo)&&t.status!=="concluido"?700:400,whiteSpace:"nowrap"}}>{t.prazo||"-"}{isPrazoVencido(t.prazo)&&t.status!=="concluido"?" ⚠":"" }</td>
                       <td><span className="pill" style={{color:pr.color,background:pr.bg,fontSize:10}}>▲ {pr.label}</span></td>
                       <td><span className="pill" style={{color:st.color,background:st.bg,fontSize:10}}>● {st.label}</span></td>
                       <td style={{fontSize:11,color:t.retorno?C.green:C.muted,maxWidth:140}}>
@@ -4160,21 +4303,7 @@ const dd = (d) => String(d).padStart(2,"0");
 const fmtDate = (d) => `${dd(d.getDate())}/${dd(d.getMonth()+1)}/${String(d.getFullYear()).slice(-2)}`;
 const addDays = (d,n) => { const r=new Date(d); r.setDate(r.getDate()+n); return r; };
 
-const AGENDA_INIT = [
-  // Esta semana
-  { id:1,  re:"RE5319", nome:"Carlos A. Mendes",    tipo:"Mentoria inicial",    hora:"09:00", data:fmtDate(hoje),           durMin:60,  status:"confirmado", obs:"Acompanhante: esposa", local:"Sala RH"   },
-  { id:2,  re:"RE4201", nome:"Marcos P. Lima",      tipo:"Acompanhamento",      hora:"10:30", data:fmtDate(hoje),           durMin:45,  status:"confirmado", obs:"",                    local:"RH"        },
-  { id:3,  re:"RE6014", nome:"Rafael T. Santos",    tipo:"Mentoria inicial",    hora:"14:00", data:fmtDate(hoje),           durMin:60,  status:"pendente",   obs:"Aguarda confirmacao", local:"Sala 1"    },
-  { id:4,  re:"RE3887", nome:"Joao S. Oliveira",    tipo:"Retorno psicologo",   hora:"16:00", data:fmtDate(hoje),           durMin:30,  status:"confirmado", obs:"",                    local:"Psicologia"},
-  { id:5,  re:"RE5507", nome:"Paulo B. Rodrigues",  tipo:"Acompanhamento",      hora:"08:30", data:fmtDate(addDays(hoje,1)),durMin:45,  status:"confirmado", obs:"",                    local:"RH"        },
-  { id:6,  re:"RE7801", nome:"Felipe A. Nascimento",tipo:"Mentoria inicial",    hora:"11:00", data:fmtDate(addDays(hoje,1)),durMin:60,  status:"pendente",   obs:"Primeira vez",        local:"Sala RH"   },
-  { id:7,  re:"RE3341", nome:"Sandro P. Ferreira",  tipo:"Acompanhamento",      hora:"14:30", data:fmtDate(addDays(hoje,2)),durMin:45,  status:"confirmado", obs:"",                    local:"RH"        },
-  { id:8,  re:"RE1023", nome:"Ezequiel D. Fonseca", tipo:"Mentoria inicial",    hora:"09:00", data:fmtDate(addDays(hoje,3)),durMin:60,  status:"agendado",   obs:"Novo no programa",    local:"Sala RH"   },
-  { id:9,  re:"RE6602", nome:"Odair C. Magalhaes",  tipo:"Retorno ambulatorio", hora:"15:00", data:fmtDate(addDays(hoje,3)),durMin:30,  status:"confirmado", obs:"",                    local:"Ambulatorio"},
-  { id:10, re:"RE5671", nome:"Rosivaldo C. Moura",  tipo:"Mentoria inicial",    hora:"10:00", data:fmtDate(addDays(hoje,5)),durMin:60,  status:"agendado",   obs:"",                    local:"Sala RH"   },
-  { id:11, re:"RE2934", nome:"Andre M. Costa",      tipo:"Acompanhamento",      hora:"13:00", data:fmtDate(addDays(hoje,5)),durMin:45,  status:"confirmado", obs:"Evolucao positiva",   local:"RH"        },
-  { id:12, re:"RE4201", nome:"Marcos P. Lima",      tipo:"Retorno juridico",    hora:"16:30", data:fmtDate(addDays(hoje,7)),durMin:30,  status:"agendado",   obs:"",                    local:"Juridico"  },
-];
+const AGENDA_INIT = [];
 
 const TIPO_COLORS = {
   "Mentoria inicial":   { color:"#00D4FF", bg:"#00D4FF18", icon:"🎯" },
@@ -4193,6 +4322,9 @@ const STATUS_AGENDA = {
 };
 
 // ─── AGENDA PAGE ──────────────────────────────────────────────────────────────
+const LOCAIS_PADRAO = ["Garagem 1","Garagem 3","Garagem 4","Sala RH","Psicologia","Ambulatorio","Juridico","Online"];
+const DIAS_SEMANA = ["Todos","Dom","Seg","Ter","Qua","Qui","Sex","Sab"];
+
 const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
   const [view, setView]           = useState("semana"); // semana | lista | calendario
   const [calYear,  setCalYear]    = useState(new Date().getFullYear());
@@ -4202,11 +4334,13 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
   const [editItem, setEditItem]   = useState(null);
   const [filtStatus, setFiltStatus] = useState("todos");
   const [filtTipo, setFiltTipo]   = useState("todos");
-  const [form, setForm] = useState({ re:"", nome:"", tipo:"Mentoria inicial", hora:"09:00", data:fmtDate(hoje), durMin:60, status:"agendado", obs:"", local:"Sala RH" });
+  const [filtDia, setFiltDia]     = useState("Todos");
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [form, setForm] = useState({ re:"", nome:"", tipo:"Mentoria inicial", hora:"09:00", data:fmtDate(hoje), durMin:60, status:"agendado", obs:"", local:"Garagem 1" });
 
   const upd = (k,v) => setForm(f=>({...f,[k]:v}));
 
-  const openNew = () => { setEditItem(null); setForm({ re:"", nome:"", tipo:"Mentoria inicial", hora:"09:00", data:fmtDate(hoje), durMin:60, status:"agendado", obs:"", local:"Sala RH" }); setShowModal(true); };
+  const openNew = () => { setEditItem(null); setForm({ re:"", nome:"", tipo:"Mentoria inicial", hora:"09:00", data:fmtDate(hoje), durMin:60, status:"agendado", obs:"", local:"Garagem 1" }); setShowModal(true); };
   const openEdit = (item) => { setEditItem(item); setForm({...item}); setShowModal(true); };
 
   const exportExcel = async () => {
@@ -4257,11 +4391,26 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
   const handleStatus = (id, st) => onUpdate(agenda.map(a=>a.id===id?{...a,status:st}:a));
   const handleDelete = (id) => onUpdate(agenda.filter(a=>a.id!==id));
 
-  // Filter
+  // Parse date string to JS Date
+  const parseAgendaDate = (s) => {
+    if(!s) return null;
+    const p=s.split("/"); if(p.length<3) return null;
+    return new Date(p[2].length===2?2000+parseInt(p[2]):parseInt(p[2]),parseInt(p[1])-1,parseInt(p[0]));
+  };
+
+  // Filter including day-of-week
   const filtered = agenda.filter(a=>{
     const sOk = filtStatus==="todos" || a.status===filtStatus;
     const tOk = filtTipo==="todos"   || a.tipo===filtTipo;
-    return sOk && tOk;
+    if(!sOk || !tOk) return false;
+    if(filtDia!=="Todos"){
+      const d=parseAgendaDate(a.data);
+      if(!d) return false;
+      const dayIdx=d.getDay(); // 0=Dom
+      const diaIdx=DIAS_SEMANA.indexOf(filtDia)-1; // -1 because "Todos" is at 0
+      if(dayIdx!==diaIdx) return false;
+    }
+    return true;
   });
 
   // Group by date
@@ -4272,10 +4421,12 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
     const pa=a.split("/").reverse().join(""), pb=b.split("/").reverse().join(""); return pa.localeCompare(pb);
   });
 
-  // Week days from today
+  // Week days with offset navigation
+  const weekBase = addDays(hoje, weekOffset*7);
   const weekDays = Array.from({length:7},(_,i)=>{
-    const d=addDays(hoje,i);
-    return { date:fmtDate(d), label:d.toLocaleDateString("pt-BR",{weekday:"short"}), num:dd(d.getDate()), isToday:i===0 };
+    const d=addDays(weekBase,i);
+    const isToday = fmtDate(d)===fmtDate(hoje);
+    return { date:fmtDate(d), label:d.toLocaleDateString("pt-BR",{weekday:"short"}), num:dd(d.getDate()), isToday };
   });
 
   // KPIs
@@ -4349,12 +4500,12 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
               {editItem?"✏️ Editar Agendamento":"📅 Novo Agendamento"}
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}} className="form-grid-2">
-              <div>
-                <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Operador *</div>
+              <div style={{gridColumn:"1 / -1"}}>
+                <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Operador * (RE - Nome)</div>
                 <select style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none"}}
                   value={form.re} onChange={e=>{const op=operators.find(o=>o.re===e.target.value);upd("re",e.target.value);if(op)upd("nome",op.nome);}}>
-                  <option value="">Selecione...</option>
-                  {operators.map(o=><option key={o.re} value={o.re}>{o.re} - {o.nome}</option>)}
+                  <option value="">Selecione o operador...</option>
+                  {operators.map(o=><option key={o.re} value={o.re}>{o.re} - {o.nome} ({o.funcao})</option>)}
                 </select>
               </div>
               <div>
@@ -4385,7 +4536,7 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
                 <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Local</div>
                 <select style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none"}}
                   value={form.local} onChange={e=>upd("local",e.target.value)}>
-                  {["Sala RH","RH","Sala 1","Sala 2","Psicologia","Ambulatorio","Juridico","Online","Externo"].map(l=><option key={l}>{l}</option>)}
+                  {LOCAIS_PADRAO.map(l=><option key={l}>{l}</option>)}
                 </select>
               </div>
             </div>
@@ -4472,14 +4623,32 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
           <option value="todos">Todos os tipos</option>
           {tiposUniq.map(t=><option key={t}>{t}</option>)}
         </select>
+        {/* Filtro por dia da semana */}
+        <div style={{display:"flex",gap:4,background:C.surface,borderRadius:9,padding:3}}>
+          {DIAS_SEMANA.map(d=>(
+            <button key={d} onClick={()=>setFiltDia(d)} style={{padding:"5px 10px",borderRadius:7,border:"none",cursor:"pointer",fontSize:11,fontWeight:600,
+              background:filtDia===d?C.card:"transparent",color:filtDia===d?C.accent:C.muted,transition:"all .2s"}}>
+              {d}
+            </button>
+          ))}
+        </div>
         <span style={{fontSize:12,color:C.muted}}>{filtered.length} compromisso{filtered.length!==1?"s":""}</span>
+      </div>
+      {/* ── Navegacao de datas ── */}
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
+        <button onClick={()=>setWeekOffset(w=>w-1)} style={{background:C.card,border:`1px solid ${C.border}`,color:C.text,padding:"6px 14px",borderRadius:8,cursor:"pointer",fontSize:16,fontWeight:700}}>←</button>
+        <div style={{fontFamily:"'Inter',sans-serif",fontSize:14,fontWeight:600,color:weekOffset===0?C.accent:C.text}}>
+          {weekOffset===0?"Esta semana":weekOffset>0?`+${weekOffset} semana${weekOffset>1?"s":""}`:`${weekOffset} semana${weekOffset<-1?"s":""}`}
+        </div>
+        <button onClick={()=>setWeekOffset(w=>w+1)} style={{background:C.card,border:`1px solid ${C.border}`,color:C.text,padding:"6px 14px",borderRadius:8,cursor:"pointer",fontSize:16,fontWeight:700}}>→</button>
+        {weekOffset!==0&&<button onClick={()=>setWeekOffset(0)} className="abt" style={{padding:"5px 12px",fontSize:11}}>Hoje</button>}
       </div>
 
       {/* ══ VISAO SEMANA ══ */}
       {view==="semana" && (
         <div>
           {/* Strip 7 dias */}
-          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:8,marginBottom:20}}>
+          <div className="agenda-week-strip" style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:8,marginBottom:20}}>
             {weekDays.map(d=>{
               const items=byDate[d.date]||[];
               return(
@@ -4497,8 +4666,8 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
             })}
           </div>
 
-          {/* Hoje em destaque */}
-          {deHoje.length>0 && (
+          {/* Hoje em destaque (only if current week) */}
+          {weekOffset===0 && deHoje.length>0 && (
             <div className="card" style={{marginBottom:20,borderColor:`${C.accent}40`}}>
               <div className="ct" style={{marginBottom:12}}>
                 <span className="ctd"/>
@@ -5307,7 +5476,7 @@ export default function App() {
   }
 }}/>}
           {active==="agenda"      && <AgendaPage agenda={filteredAgenda} onUpdate={setAgd} onAdd={a=>setAgd(prev=>[...prev,a])} operators={ops}/>}
-          {active==="tratativas"  && <TratativasPage tratativas={filteredTrat} onUpdate={setTrat} onAdd={t=>{setTrat(prev=>[...prev,t]);audit("Nova tratativa: "+t.area+" - "+t.re, "Criou");}} operators={ops} sessions={sessions}/>}
+          {active==="tratativas"  && <TratativasPage tratativas={filteredTrat} onUpdate={setTrat} onAdd={t=>{setTrat(prev=>[...prev,t]);audit("Nova tratativa: "+t.area+" - "+t.re, "Criou");}} operators={ops} sessions={sessions} onVerFicha={(op)=>{setSelectedOp(op);setActive("ficha");}}/>}
           {active==="relatorios"  && <RelatoriosPage data={filteredOps} sessions={sessions} tratativas={filteredTrat} custos={custos}/>}
           {active==="auditoria"   && <AuditoriaPage auditLogs={auditLogs} user={user}/>}
           {active==="parametros"  && <ParametrosPage custos={custos} onSave={setCust}/>}
