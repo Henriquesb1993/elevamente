@@ -51,9 +51,9 @@ const THEMES = {
     label:"🌙 Apagar",
   },
   light: {
-    bg:"#F3F4F6", surface:"#FFFFFF", card:"#FFFFFF", border:"#E5E7EB",
-    accent:"#0284C7", accent2:"#0369A1", gold:"#D97706", green:"#059669",
-    red:"#DC2626", orange:"#EA580C", purple:"#7C3AED", text:"#111827", muted:"#6B7280",
+    bg:"#F5F7FA", surface:"#f0f4f8", card:"#FFFFFF", border:"rgba(37,99,235,0.18)",
+    accent:"#2563EB", accent2:"#1e40af", gold:"#D97706", green:"#16a34a",
+    red:"#DC2626", orange:"#EA580C", purple:"#7C3AED", text:"#1a1a2e", muted:"#64748B",
     label:"💡 Acender",
   },
 };
@@ -439,38 +439,15 @@ function processExcel(workbook) {
 
 // ─── STATIC MOCK (used before upload) ───────────────────────────────────────
 const MOCK = {
-  operators: [
-    { re:"RE5319",nome:"Carlos A. Mendes",   funcao:"Motorista", garagem:"G3",admissao:"12/03/18",faltas:8, multas:3,suspensoes:0,atestados:2,acidentes:1,status:"mentoria",resultado:"melhora",  dataMentoria:"10/Jan/25",comprometimento:4,timeline:[] },
-    { re:"RE4201",nome:"Marcos P. Lima",     funcao:"Motorista", garagem:"G1",admissao:"15/06/17",faltas:18,multas:7,suspensoes:1,atestados:1,acidentes:2,status:"mentoria",resultado:"piora",    dataMentoria:"22/Jan/25",comprometimento:2,timeline:[] },
-    { re:"RE3887",nome:"João S. Oliveira",   funcao:"Motorista", garagem:"G2",admissao:"05/07/19",faltas:6, multas:2,suspensoes:0,atestados:3,acidentes:0,status:"mentoria",resultado:"melhora",  dataMentoria:"05/Fev/25",comprometimento:5,timeline:[] },
-    { re:"RE5507",nome:"Paulo B. Rodrigues", funcao:"Motorista", garagem:"G1",admissao:"22/01/20",faltas:9, multas:4,suspensoes:0,atestados:1,acidentes:0,status:"mentoria",resultado:"melhora",  dataMentoria:"18/Fev/25",comprometimento:4,timeline:[] },
-    { re:"RE6014",nome:"Rafael T. Santos",   funcao:"Motorista", garagem:"G4",admissao:"02/02/20",faltas:12,multas:5,suspensoes:1,atestados:0,acidentes:1,status:"mentoria",resultado:"piora",    dataMentoria:"12/Fev/25",comprometimento:1,timeline:[] },
-    { re:"RE7801",nome:"Felipe A. Nascimento",funcao:"Cobrador",garagem:"G2",admissao:"18/09/21",faltas:14,multas:6,suspensoes:0,atestados:2,acidentes:0,status:"mentoria",resultado:"piora",    dataMentoria:"01/Mar/25",comprometimento:2,timeline:[] },
-    { re:"RE3341",nome:"Sandro P. Ferreira", funcao:"Motorista", garagem:"G2",admissao:"27/11/19",faltas:11,multas:3,suspensoes:0,atestados:1,acidentes:0,status:"mentoria",resultado:"andamento",dataMentoria:"15/Mar/25",comprometimento:3,timeline:[] },
-    { re:"RE6602",nome:"Odair C. Magalhães", funcao:"Cobrador",  garagem:"G1",admissao:"13/08/20",faltas:9, multas:2,suspensoes:0,atestados:0,acidentes:1,status:"mentoria",resultado:"andamento",dataMentoria:"17/Mar/25",comprometimento:3,timeline:[] },
-    { re:"RE1023",nome:"Ezequiel D. Fonseca",funcao:"Motorista", garagem:"G4",admissao:"14/02/22",faltas:10,multas:4,suspensoes:0,atestados:2,acidentes:0,status:"aguardando",resultado:null,dataMentoria:null,comprometimento:null,timeline:[] },
-    { re:"RE3388",nome:"Natalino P. Brito",  funcao:"Cobrador",  garagem:"G2",admissao:"30/06/20",faltas:8, multas:2,suspensoes:0,atestados:1,acidentes:1,status:"aguardando",resultado:null,dataMentoria:null,comprometimento:null,timeline:[] },
-    { re:"RE5671",nome:"Rosivaldo C. Moura", funcao:"Motorista", garagem:"G3",admissao:"12/08/19",faltas:12,multas:5,suspensoes:1,atestados:0,acidentes:0,status:"aguardando",resultado:null,dataMentoria:null,comprometimento:null,timeline:[] },
-    { re:"RE7744",nome:"Gilvan F. Torres",   funcao:"Motorista", garagem:"G1",admissao:"25/01/21",faltas:9, multas:3,suspensoes:0,atestados:2,acidentes:0,status:"aguardando",resultado:null,dataMentoria:null,comprometimento:null,timeline:[] },
-  ],
-  kpis:{ total:38, emMentoria:24, melhoraram:14, pioraram:4, aguardando:14, taxaMelhora:68 },
-  eventosMes:[
-    { mes:"Out/24",faltas:18,multas:12,acidentes:2,mentorias:3 },
-    { mes:"Nov/24",faltas:22,multas:15,acidentes:1,mentorias:5 },
-    { mes:"Dez/24",faltas:14,multas:10,acidentes:3,mentorias:8 },
-    { mes:"Jan/25",faltas:19,multas:8, acidentes:1,mentorias:11 },
-    { mes:"Fev/25",faltas:11,multas:6, acidentes:0,mentorias:14 },
-    { mes:"Mar/25",faltas:8, multas:4, acidentes:1,mentorias:16 },
-  ],
-  causas:[
-    { name:"Problemas familiares",value:34 },{ name:"Saúde / bem-estar",value:28 },
-    { name:"Financeiro",value:19 },{ name:"Conflito interno",value:12 },{ name:"Outros",value:7 },
-  ],
+  operators: [],
+  kpis:{ total:0, emMentoria:0, melhoraram:0, pioraram:0, aguardando:0, taxaMelhora:0 },
+  eventosMes:[],
+  causas:[],
   sheetSummary:[],
 };
 
 // ─── STYLES ──────────────────────────────────────────────────────────────────
-const styles = `
+const getStyles = (C) => `
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:${C.bg};color:${C.text};font-family:'Inter',sans-serif;font-size:16px;line-height:1.5;overflow-x:hidden;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
@@ -1457,33 +1434,9 @@ function calcPerdaFinanceira(op, custos) {
 }
 
 // ─── MOCK DATA FOR FICHA ─────────────────────────────────────────────────────
-const RELATOS_MOCK = {
-  "RE5319": [
-    { data:"10/Jan/25", acompanhante:"Esposa",  comprometimento:4, causa:"Problemas familiares — conflito conjugal afetando concentração no trabalho.", setor:"Psicologia", relato:"Operador demonstrou abertura para conversa. Relatou brigas frequentes em casa desde novembro. Esposa presente concordou em buscar apoio psicológico do casal.", denuncia:false },
-    { data:"10/Fev/25", acompanhante:"Sozinho", comprometimento:4, causa:"Acompanhamento pós mentoria — evolução positiva.", setor:"–",         relato:"Operador retornou para acompanhamento. Relata melhora no ambiente familiar após sessões com psicólogo. Comprometimento mantido.", denuncia:false },
-    { data:"10/Mar/25", acompanhante:"Esposa",  comprometimento:5, causa:"Encerramento do ciclo — melhora consolidada.",                         setor:"–",         relato:"Resultado positivo. Faltas reduziram de 4/semana para 0. Esposa confirmou melhora no clima familiar. Operador agradeceu o programa.", denuncia:false },
-  ],
-  "RE4201": [
-    { data:"22/Jan/25", acompanhante:"Sozinho", comprometimento:2, causa:"Dívidas financeiras — empréstimo consignado comprometendo renda.",      setor:"RH",        relato:"Operador resistente no início. Revelou dívidas que comprometem 70% do salário. Nega problemas pessoais além do financeiro. Encaminhado para RH para orientação de crédito.", denuncia:false },
-    { data:"22/Fev/25", acompanhante:"Sozinho", comprometimento:1, causa:"Piora do quadro — dívidas acumuladas, postura defensiva.",              setor:"Jurídico",  relato:"Operador não implementou nenhuma das orientações. Novo empréstimo contraído. Postura hostil durante a mentoria. Caso encaminhado para análise jurídica.", denuncia:false },
-  ],
-  "RE3887": [
-    { data:"05/Fev/25", acompanhante:"Mãe",    comprometimento:5, causa:"Problemas de saúde — diagnóstico de ansiedade não tratada.",            setor:"Ambulatório",relato:"Mãe participativa. Operador relatou crises de ansiedade frequentes que causam faltas. Nunca buscou tratamento por falta de tempo/dinheiro. Encaminhado ao ambulatório da empresa.", denuncia:false },
-  ],
-};
+const RELATOS_MOCK = {};
 
-const ENCAMINHAMENTOS_MOCK = {
-  "RE5319": [
-    { area:"Psicologia", icon:"🧠", data:"10/Jan/25", status:"concluido", descricao:"Terapia de casal — 8 sessões", retorno:"Casal completou as sessões. Psicólogo reporta melhora significativa na comunicação. Alta em 15/Mar/25.", cor:C.purple },
-  ],
-  "RE4201": [
-    { area:"RH",        icon:"👔", data:"22/Jan/25", status:"concluido", descricao:"Orientação sobre renegociação de dívidas consignadas", retorno:"Orientação realizada em 30/Jan. Operador não seguiu as recomendações.", cor:C.accent2 },
-    { area:"Jurídico",  icon:"⚖️", data:"22/Fev/25", status:"andamento", descricao:"Análise de comportamento disciplinar reincidente",    retorno:"Processo em análise. Aguarda parecer final.", cor:C.orange },
-  ],
-  "RE3887": [
-    { area:"Ambulatório",icon:"🏥",data:"05/Fev/25", status:"concluido", descricao:"Avaliação e tratamento de ansiedade",                retorno:"Operador iniciou tratamento com ansiolítico. Evolução positiva relatada em retorno de 01/Mar.", cor:C.green },
-  ],
-};
+const ENCAMINHAMENTOS_MOCK = {};
 
 // Gera timeline de eventos mockada para operadores sem dados reais
 const buildMockTimeline = (op) => {
@@ -1921,18 +1874,7 @@ async function gerarPDFRelatorio(data, sessions, tratativas, custos) {
 }
 
 // ─── MOCK MULTAS DETAIL ───────────────────────────────────────────────────────
-const MULTAS_DETAIL_MOCK = {
-  "RE5319":[
-    {data:"27/02/25",linha:"967A",descricao:"Cinto de seguranca inoperante",enquadramento:"M40",valor:225.00},
-    {data:"11/03/25",linha:"967A",descricao:"Farol vermelho",enquadramento:"GR37",valor:900.00},
-    {data:"13/03/25",linha:"967A",descricao:"Cinto de seguranca inoperante",enquadramento:"M40",valor:225.00},
-    {data:"14/03/25",linha:"967A",descricao:"Cinto de seguranca inoperante",enquadramento:"M40",valor:225.00},
-  ],
-  "RE4201":[
-    {data:"05/03/25",linha:"203",descricao:"Avanco de sinal vermelho",enquadramento:"Art.208",valor:293.47},
-    {data:"12/03/25",linha:"203",descricao:"Uso de celular ao volante",enquadramento:"Art.252-I",valor:293.47},
-  ],
-};
+const MULTAS_DETAIL_MOCK = {};
 
 // ─── FICHA PAGE ───────────────────────────────────────────────────────────────
 const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
@@ -2459,28 +2401,25 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
 };
 
 // ─── MOCK SESSIONS STORE ─────────────────────────────────────────────────────
-const SESSIONS_INIT = [
-  { id:1, re:"RE5319", nome:"Carlos A. Mendes",   data:"10/01/25", acompanhante:"Esposa",  tipoAcomp:"Conjuge",  comprometimento:4, causas:["Problemas familiares"], setor:"Psicologia", subsetor:"Psicologo",  relato:"Relata brigas frequentes em casa. Esposa confirmou. Encaminhado para terapia de casal.", denuncia:false, status:"concluido" },
-  { id:2, re:"RE4201", nome:"Marcos P. Lima",     data:"22/01/25", acompanhante:"Sozinho", tipoAcomp:"Sozinho",  comprometimento:2, causas:["Financeiro"],          setor:"RH",          subsetor:"Orientacao", relato:"Operador resistente. Dividas consignadas. Recusou orientacao de credito.",              denuncia:false, status:"andamento" },
-  { id:3, re:"RE3887", nome:"Joao S. Oliveira",   data:"05/02/25", acompanhante:"Mae",     tipoAcomp:"Familiar", comprometimento:5, causas:["Saude / bem-estar"],   setor:"Ambulatorio", subsetor:"Medico",     relato:"Crises de ansiedade. Nunca buscou tratamento. Encaminhado ao ambulatorio.",            denuncia:false, status:"concluido" },
-];
+const SESSIONS_INIT = [];
 
-const CAUSAS_OPTIONS = ["Problemas familiares","Saude / bem-estar","Financeiro","Conflito interno com colega","Conflito com lideranca","Uso de substancias","Problema juridico","Luto / perda","Outros"];
+const CAUSAS_OPTIONS = ["Problemas familiares","Saúde / bem-estar","Financeiro","Conflito interno com colega","Conflito com liderança","Uso de substâncias","Problema jurídico","Luto / perda","Outros"];
 const SETORES_MAP = {
-  "RH":                    ["RH Geral","DP","Medico","Psicologo"],
-  "Juridico":              ["Analise","Mediacao","Processo interno"],
-  "Planejamento":          ["Planejamento Operacional","Analise de dados","Gestao de escala"],
+  "RH":                    ["RH Geral","DP","Médico","Psicólogo"],
+  "Jurídico":              ["Análise","Mediação","Processo interno"],
+  "Planejamento":          ["Planejamento Operacional","Análise de dados","Gestão de escala"],
   "Gerente Operacional":   ["Gerente G1","Gerente G2","Gerente G3","Gerente G4"],
+  "Ambulatório":           ["Médico","Enfermeiro","Psicólogo"],
 };
 const AREA_ICONS_MAP = {
   "RH":"👔", "Juridico":"⚖️", "Planejamento":"📋", "Gerente Operacional":"👨‍💼",
 };
 
 // ─── MENTORIA PAGE ─────────────────────────────────────────────────────────────
-const MentoriaPage = ({ operators, sessions, onSave }) => {
-  const STEPS = ["Identificacao","Relato & Causas","Encaminhamento","Confirmacao"];
+const MentoriaPage = ({ operators, sessions, onSave, onDelete, onUpdate }) => {
+  const STEPS = ["Identificação","Relato & Causas","Encaminhamento","Confirmação"];
   const [step, setStep]       = useState(0);
-  const [viewMode, setViewMode] = useState("lista"); // lista | novo
+  const [viewMode, setViewMode] = useState("lista"); // lista | novo | editar
   const [form, setForm]       = useState({
     re:"", nome:"", data:new Date().toLocaleDateString("pt-BR"),
     acompanhante:"", tipoAcomp:"Sozinho", comprometimento:0,
@@ -2488,6 +2427,8 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
   });
   const [saved, setSaved]     = useState(false);
   const [filterRe, setFilterRe] = useState("");
+  const [kpiFilter, setKpiFilter] = useState(null); // null | "all" | "alto" | "baixo"
+  const [editingId, setEditingId] = useState(null);
 
   const upd = (k,v) => setForm(f=>({...f,[k]:v}));
 
@@ -2507,14 +2448,37 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
   const [opDropOpen, setOpDropOpen]   = useState(false);
   const [outrosText, setOutrosText]   = useState("");
 
+  const resetForm = () => setForm({ re:"", nome:"", data:new Date().toLocaleDateString("pt-BR"),
+    acompanhante:"", tipoAcomp:"Sozinho", comprometimento:0, causas:[], setor:"", subsetor:"", relato:"", denuncia:false });
+
   const handleSubmit = () => {
-    const newSession = { ...form, id: Date.now(), status:"andamento" };
-    onSave(newSession);
-    setSaved(true);
-    toast(`Sessao de mentoria registrada para ${form.nome||form.re}!`, "success");
-    setTimeout(()=>{ setSaved(false); setViewMode("lista"); setStep(0);
-      setForm({ re:"", nome:"", data:new Date().toLocaleDateString("pt-BR"),
-        acompanhante:"", tipoAcomp:"Sozinho", comprometimento:0, causas:[], setor:"", subsetor:"", relato:"", denuncia:false }); }, 1800);
+    if (editingId) {
+      onUpdate({ ...form, id: editingId });
+      setSaved(true);
+      toast(`Sessão de mentoria atualizada para ${form.nome||form.re}!`, "success");
+      setTimeout(()=>{ setSaved(false); setViewMode("lista"); setStep(0); setEditingId(null); resetForm(); }, 1800);
+    } else {
+      const newSession = { ...form, id: Date.now(), status:"andamento" };
+      onSave(newSession);
+      setSaved(true);
+      toast(`Sessão de mentoria registrada para ${form.nome||form.re}!`, "success");
+      setTimeout(()=>{ setSaved(false); setViewMode("lista"); setStep(0); resetForm(); }, 1800);
+    }
+  };
+
+  const handleEdit = (s) => {
+    setForm({ re:s.re, nome:s.nome, data:s.data, acompanhante:s.acompanhante, tipoAcomp:s.tipoAcomp,
+      comprometimento:s.comprometimento, causas:s.causas||[], setor:s.setor, subsetor:s.subsetor, relato:s.relato, denuncia:s.denuncia, status:s.status });
+    setEditingId(s.id);
+    setViewMode("novo");
+    setStep(0);
+  };
+
+  const handleDelete = (s) => {
+    if (window.confirm(`Tem certeza que deseja apagar a sessão de ${s.nome} (${s.re})?`)) {
+      onDelete(s.id);
+      toast(`Sessão de ${s.nome} apagada.`, "success");
+    }
   };
 
   const exportExcel = async () => {
@@ -2544,7 +2508,7 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
       ];
 
       const wb = xlsxLib.utils.book_new();
-      xlsxLib.utils.book_append_sheet(wb, ws, "Sessoes Mentoria");
+      xlsxLib.utils.book_append_sheet(wb, ws, "Sessões Mentoria");
 
       // Summary sheet
       const causasAll = allSessions.flatMap(s=>s.causas||[]);
@@ -2576,9 +2540,11 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
   };
 
   const allSessions = [...sessions].reverse();
-  const filtered = filterRe ? allSessions.filter(s=>s.re.toLowerCase().includes(filterRe.toLowerCase())||s.nome.toLowerCase().includes(filterRe.toLowerCase())) : allSessions;
+  let filtered = filterRe ? allSessions.filter(s=>s.re.toLowerCase().includes(filterRe.toLowerCase())||s.nome.toLowerCase().includes(filterRe.toLowerCase())) : allSessions;
+  if (kpiFilter==="alto") filtered = filtered.filter(s=>s.comprometimento>=4);
+  if (kpiFilter==="baixo") filtered = filtered.filter(s=>s.comprometimento<=2);
 
-  const ST_MAP = { concluido:{label:"Concluido",color:C.green,bg:`${C.green}18`}, andamento:{label:"Em andamento",color:C.gold,bg:`${C.gold}18`}, pendente:{label:"Pendente",color:C.red,bg:`${C.red}18`} };
+  const ST_MAP = { concluido:{label:"Concluído",color:C.green,bg:`${C.green}18`}, andamento:{label:"Em andamento",color:C.gold,bg:`${C.gold}18`}, pendente:{label:"Pendente",color:C.red,bg:`${C.red}18`} };
 
   const subsetores = SETORES_MAP[form.setor] || [];
   const canNext = step===0?(form.re&&form.data):step===1?(form.causas.length>0&&form.relato.length>10):step===2?(form.setor):true;
@@ -2588,7 +2554,7 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
       {/* Header com toggle */}
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20,flexWrap:"wrap"}}>
         <div style={{fontFamily:"'Inter',sans-serif",fontSize:18,fontWeight:700}}>
-          {viewMode==="lista"?"Sessoes Registradas":"Nova Sessao de Mentoria"}
+          {viewMode==="lista"?"Sessões Registradas":editingId?"Editar Sessão de Mentoria":"Nova Sessão de Mentoria"}
         </div>
         <div style={{flex:1}}/>
         {viewMode==="lista"
@@ -2598,27 +2564,34 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
               <button className="abt" style={{padding:"9px 20px",fontSize:13,background:`${C.green}18`,borderColor:C.green,color:C.green}}
                 onClick={()=>{setViewMode("novo");setStep(0);}}>+ Nova Mentoria</button>
             </div>
-          : <button className="abt" onClick={()=>{setViewMode("lista");setStep(0);}}>← Voltar a lista</button>
+          : <button className="abt" onClick={()=>{setViewMode("lista");setStep(0);setEditingId(null);resetForm();}}>← Voltar à lista</button>
         }
       </div>
 
       {/* ── LISTA DE SESSOES ── */}
       {viewMode==="lista" && (
         <div>
-          {/* Resumo rapido */}
+          {/* Resumo rápido */}
           <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:20}} className="men-kpi-grid">
             {[
-              {v:allSessions.length,       l:"Total de sessoes",    c:C.accent},
-              {v:allSessions.filter(s=>s.comprometimento>=4).length, l:"Alto comprometimento (4-5★)", c:C.green},
-              {v:allSessions.filter(s=>s.comprometimento<=2).length, l:"Baixo comprometimento (1-2★)", c:C.red},
-              {v:[...new Set(allSessions.flatMap(s=>s.causas))].length, l:"Causas identificadas", c:C.gold},
+              {v:allSessions.length,       l:"Total de sessões",    c:C.accent, f:"all"},
+              {v:allSessions.filter(s=>s.comprometimento>=4).length, l:"Alto comprometimento (4-5★)", c:C.green, f:"alto"},
+              {v:allSessions.filter(s=>s.comprometimento<=2).length, l:"Baixo comprometimento (1-2★)", c:C.red, f:"baixo"},
+              {v:[...new Set(allSessions.flatMap(s=>s.causas))].length, l:"Causas identificadas", c:C.gold, f:null},
             ].map(x=>(
-              <div key={x.l} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 18px"}}>
+              <div key={x.l} onClick={()=>x.f!==null&&setKpiFilter(kpiFilter===x.f?null:x.f)}
+                style={{background:C.card,border:`1px solid ${kpiFilter===x.f?x.c:C.border}`,borderRadius:12,padding:"14px 18px",
+                  cursor:x.f!==null?"pointer":"default",transition:"all .2s",
+                  boxShadow:kpiFilter===x.f?`0 0 12px ${x.c}20`:"none"}}>
                 <div style={{fontFamily:"'Inter',sans-serif",fontSize:26,fontWeight:800,color:x.c}}>{x.v}</div>
                 <div style={{fontSize:11,color:C.muted,marginTop:3}}>{x.l}</div>
               </div>
             ))}
           </div>
+          {kpiFilter && <div style={{marginBottom:12,display:"flex",alignItems:"center",gap:8}}>
+            <span style={{fontSize:12,color:C.muted}}>Filtro ativo: <strong style={{color:C.text}}>{kpiFilter==="all"?"Todos os operadores":kpiFilter==="alto"?"Alto comprometimento (4-5★)":"Baixo comprometimento (1-2★)"}</strong></span>
+            <button onClick={()=>setKpiFilter(null)} style={{background:`${C.red}15`,border:`1px solid ${C.red}30`,borderRadius:6,padding:"2px 8px",fontSize:11,color:C.red,cursor:"pointer"}}>✕ Limpar</button>
+          </div>}
 
           <input style={{background:C.card,border:`1px solid ${C.border}`,color:C.text,padding:"10px 16px",
             borderRadius:10,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none",marginBottom:16}}
@@ -2638,8 +2611,9 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
                   </div>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:6}}>
-                      <span style={{fontWeight:700,fontSize:14}}>{s.nome}</span>
-                      <span className="re-tag" style={{fontSize:11}}>{s.re}</span>
+                      <span style={{fontWeight:700,fontSize:14,cursor:"pointer",textDecoration:"underline",textDecorationColor:`${C.accent}40`,textUnderlineOffset:3}}
+                        onClick={()=>handleEdit(s)} title="Clique para editar">{s.nome}</span>
+                      <span style={{fontSize:14,fontWeight:800,fontFamily:"'Inter',sans-serif",background:`${C.accent}15`,border:`1px solid ${C.accent}30`,borderRadius:6,padding:"2px 10px",color:C.accent}}>{s.re}</span>
                       <span style={{fontSize:12,color:C.muted}}>📅 {s.data}</span>
                       <span className="pill" style={{color:st.color,background:st.bg,fontSize:11}}>● {st.label}</span>
                     </div>
@@ -2648,7 +2622,7 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
                       <span style={{fontSize:12,color:C.muted}}>🎯 Setor: <strong style={{color:C.accent}}>{s.setor||"-"}</strong>{s.subsetor&&` / ${s.subsetor}`}</span>
                     </div>
                     <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
-                      {s.causas.map(c=><span key={c} style={{fontSize:11,background:`${C.purple}18`,border:`1px solid ${C.purple}30`,borderRadius:6,padding:"2px 8px",color:C.purple}}>{c}</span>)}
+                      {(s.causas||[]).map(c=><span key={c} style={{fontSize:11,background:`${C.purple}18`,border:`1px solid ${C.purple}30`,borderRadius:6,padding:"2px 8px",color:C.purple}}>{c}</span>)}
                     </div>
                     <div style={{fontSize:12,color:C.muted,lineHeight:1.6,background:C.bg,borderRadius:8,padding:"8px 12px"}}>
                       {s.relato}
@@ -2657,7 +2631,13 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
                   <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
                     <div style={{display:"flex",gap:2}}>{[1,2,3,4,5].map(i=><span key={i} style={{fontSize:16,color:i<=s.comprometimento?C.gold:"#2a3a4a"}}>★</span>)}</div>
                     <div style={{fontSize:10,color:C.muted}}>comprometimento</div>
-                    {s.denuncia&&<span style={{fontSize:10,color:C.red,fontWeight:700,marginTop:4}}>⚠️ DENUNCIA</span>}
+                    {s.denuncia&&<span style={{fontSize:10,color:C.red,fontWeight:700,marginTop:4}}>⚠️ DENÚNCIA</span>}
+                    <div style={{display:"flex",gap:4,marginTop:8}}>
+                      <button onClick={()=>handleEdit(s)} title="Editar"
+                        style={{padding:"4px 10px",borderRadius:6,border:`1px solid ${C.accent}30`,background:`${C.accent}10`,color:C.accent,cursor:"pointer",fontSize:12}}>✏️</button>
+                      <button onClick={()=>handleDelete(s)} title="Apagar"
+                        style={{padding:"4px 10px",borderRadius:6,border:`1px solid ${C.red}30`,background:`${C.red}10`,color:C.red,cursor:"pointer",fontSize:12}}>🗑️</button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2667,7 +2647,7 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
           {filtered.length===0&&(
             <div style={{textAlign:"center",padding:"60px 0",opacity:.5}}>
               <div style={{fontSize:40,marginBottom:10}}>📋</div>
-              <div style={{fontFamily:"'Inter',sans-serif",fontSize:16}}>Nenhuma sessao encontrada</div>
+              <div style={{fontFamily:"'Inter',sans-serif",fontSize:16}}>Nenhuma sessão encontrada</div>
             </div>
           )}
         </div>
@@ -2693,7 +2673,7 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
           {/* STEP 0 - Identificacao */}
           {step===0&&(
             <div className="card">
-              <div className="ct"><span className="ctd"/>Identificacao do Operador e Sessao</div>
+              <div className="ct"><span className="ctd"/>Identificação do Operador e Sessão</div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}} className="form-grid-2">
                 <div style={{position:"relative"}}>
                   <label style={{fontSize:12,color:C.muted,display:"block",marginBottom:6}}>RE do Operador *</label>
@@ -2895,7 +2875,7 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
             </div>
           )}
 
-          {/* STEP 3 - Confirmacao */}
+          {/* STEP 3 - Confirmação */}
           {step===3&&(
             <div>
               {saved?(
@@ -2926,7 +2906,7 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
                     <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Relato</div>
                     <div style={{fontSize:13,lineHeight:1.7,color:C.text}}>{form.relato}</div>
                   </div>
-                  {form.denuncia&&<div style={{padding:"10px 14px",background:`${C.red}10`,border:`1px solid ${C.red}30`,borderRadius:8,fontSize:12,color:C.red,marginBottom:16}}>⚠️ Esta sessao possui uma <strong>denuncia registrada</strong>.</div>}
+                  {form.denuncia&&<div style={{padding:"10px 14px",background:`${C.red}10`,border:`1px solid ${C.red}30`,borderRadius:8,fontSize:12,color:C.red,marginBottom:16}}>⚠️ Esta sessão possui uma <strong>denúncia registrada</strong>.</div>}
                   <button onClick={handleSubmit} style={{width:"100%",padding:"14px",background:`linear-gradient(135deg,${C.accent},${C.accent2})`,
                     color:"#000",border:"none",borderRadius:10,fontFamily:"'Inter',sans-serif",fontSize:15,fontWeight:800,cursor:"pointer",letterSpacing:.5}}>
                     ✓ CONFIRMAR E SALVAR SESSAO
@@ -2958,15 +2938,7 @@ const MentoriaPage = ({ operators, sessions, onSave }) => {
 
 // ─── COMING SOON ──────────────────────────────────────────────────────────────
 // ─── TRATATIVAS INIT DATA ─────────────────────────────────────────────────────
-const TRATATIVAS_INIT = [
-  { id:1,  re:"RE5319", nome:"Carlos A. Mendes",    area:"Psicologia", subarea:"Psicologo",            data:"10/01/25", prazo:"10/02/25", status:"concluido",  prioridade:"alta",   descricao:"Terapia de casal - 8 sessoes agendadas.", retorno:"Casal completou as sessoes. Alta em 15/Mar/25." },
-  { id:2,  re:"RE4201", nome:"Marcos P. Lima",      area:"RH",         subarea:"Orientacao",           data:"22/01/25", prazo:"22/02/25", status:"concluido",  prioridade:"media",  descricao:"Orientacao sobre renegociacao de dividas consignadas.", retorno:"Orientacao realizada. Operador nao seguiu as recomendacoes." },
-  { id:3,  re:"RE3887", nome:"Joao S. Oliveira",    area:"Ambulatorio",subarea:"Medico",               data:"05/02/25", prazo:"05/03/25", status:"concluido",  prioridade:"alta",   descricao:"Avaliacao e tratamento de ansiedade.", retorno:"Operador iniciou tratamento. Evolucao positiva." },
-  { id:4,  re:"RE4201", nome:"Marcos P. Lima",      area:"Juridico",   subarea:"Analise",              data:"22/02/25", prazo:"22/03/25", status:"andamento",  prioridade:"alta",   descricao:"Analise de comportamento disciplinar reincidente.", retorno:"" },
-  { id:5,  re:"RE6014", nome:"Rafael T. Santos",    area:"DP",         subarea:"Orientacao disciplinar",data:"21/03/25",prazo:"04/04/25", status:"pendente",   prioridade:"urgente",descricao:"Registro de acidente com responsabilidade - providencias disciplinares.", retorno:"" },
-  { id:6,  re:"RE7801", nome:"Felipe A. Nascimento",area:"Juridico",   subarea:"Mediacao",             data:"22/03/25", prazo:"05/04/25", status:"pendente",   prioridade:"media",  descricao:"Analise de reclamacao formal de municipe.", retorno:"" },
-  { id:7,  re:"RE5507", nome:"Paulo B. Rodrigues",  area:"RH",         subarea:"Beneficios",           data:"18/02/25", prazo:"18/03/25", status:"concluido",  prioridade:"baixa",  descricao:"Revisao de beneficios - solicitacao de vale transporte extra.", retorno:"Beneficio concedido e atualizado no sistema." },
-];
+const TRATATIVAS_INIT = [];
 
 const AREA_ICONS = { RH:"👔", Psicologia:"🧠", DP:"📁", Ambulatorio:"🏥", Juridico:"⚖️" };
 const AREA_COLORS= { RH:C.accent2, Psicologia:C.purple, DP:C.gold, Ambulatorio:C.green, Juridico:C.orange };
@@ -3598,7 +3570,7 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
         ["Taxa de melhora (%)", taxaMelhora+"%"],
         ["Perda financeira total estimada (R$)", perdaTotal.toLocaleString("pt-BR",{style:"currency",currency:"BRL"})],
         ["Comprometimento medio (1-5)", compMedio],
-        ["Total de sessoes de mentoria", sessions.length],
+        ["Total de sessões de mentoria", sessions.length],
         ["Total de tratativas", tratativas.length],
         ["Tratativas concluidas", tratativas.filter(t=>t.status==="concluido").length],
         ["Tratativas pendentes", tratativas.filter(t=>t.status==="pendente").length],
@@ -3620,12 +3592,12 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
       wsRank["!cols"]=[{wch:4},{wch:10},{wch:28},{wch:10},{wch:14},{wch:8},{wch:8},{wch:12},{wch:10},{wch:12},{wch:14},{wch:14},{wch:22}];
       xlsxLib.utils.book_append_sheet(wb, wsRank, "Ranking Operadores");
 
-      // Aba 3 - Sessoes Mentoria
+      // Aba 3 - Sessões Mentoria
       const sesRows=[["RE","Nome","Data","Acompanhante","Comprometimento","Causas","Setor","Relato","Denuncia","Status"]];
       sessions.forEach(s=>sesRows.push([s.re,s.nome,s.data,s.tipoAcomp==="Sozinho"?"Sozinho":`${s.tipoAcomp}: ${s.acompanhante||""}`,s.comprometimento,(s.causas||[]).join("; "),s.setor||"-",s.relato,s.denuncia?"Sim":"Nao",s.status]));
       const wsSes=xlsxLib.utils.aoa_to_sheet(sesRows);
       wsSes["!cols"]=[{wch:10},{wch:28},{wch:12},{wch:20},{wch:16},{wch:36},{wch:14},{wch:60},{wch:10},{wch:12}];
-      xlsxLib.utils.book_append_sheet(wb, wsSes, "Sessoes Mentoria");
+      xlsxLib.utils.book_append_sheet(wb, wsSes, "Sessões Mentoria");
 
       // Aba 4 - Tratativas
       const tratRows=[["RE","Nome","Area","Subarea","Data","Prazo","Prioridade","Status","Descricao","Retorno"]];
@@ -3740,7 +3712,7 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
                 {[
                   {l:"Perda financeira total estimada", v:`R$ ${perdaTotal.toLocaleString("pt-BR",{minimumFractionDigits:2})}`, c:C.red, bar:100},
                   {l:"Comprometimento medio nas sessoes", v:`${compMedio} / 5`, c:compMedio>=4?C.green:compMedio>=3?C.gold:C.red, bar:compMedio/5*100},
-                  {l:"Total de sessoes de mentoria", v:sessions.length, c:C.accent, bar:Math.min(sessions.length/30*100,100)},
+                  {l:"Total de sessões de mentoria", v:sessions.length, c:C.accent, bar:Math.min(sessions.length/30*100,100)},
                   {l:"Tratativas concluidas", v:`${tratativas.filter(t=>t.status==="concluido").length} / ${tratativas.length}`, c:C.green, bar:tratativas.length?tratativas.filter(t=>t.status==="concluido").length/tratativas.length*100:0},
                   {l:"Tratativas pendentes (urgencia)", v:tratativas.filter(t=>t.status!=="concluido"&&t.prioridade==="urgente").length, c:C.red, bar:50},
                 ].map(x=>(
@@ -3761,7 +3733,7 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
           {/* Sessoes por mes */}
           {evMensal.length>0&&(
             <div className="card">
-              <div className="ct"><span className="ctd"/>Sessoes de Mentoria por Mes</div>
+              <div className="ct"><span className="ctd"/>Sessões de Mentoria por Mês</div>
               <ResponsiveContainer width="100%" height={180}>
                 <BarChart data={evMensal} barSize={28}>
                   <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false}/>
@@ -3969,7 +3941,7 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
         <div>
           <div className="g2" style={{marginBottom:20}}>
             <div className="card">
-              <div className="ct"><span className="ctd"/>Sessoes de Mentoria ao Longo do Tempo</div>
+              <div className="ct"><span className="ctd"/>Sessões de Mentoria ao Longo do Tempo</div>
               {evMensal.length>0?(
                 <ResponsiveContainer width="100%" height={220}>
                   <AreaChart data={evMensal}>
@@ -5208,7 +5180,7 @@ export default function App() {
 
   return (
     <>
-      <style>{styles}</style>
+      <style>{getStyles(THEMES[themeName]||THEMES.dark)}</style>
 
       {/* ── LOGIN GATE ── */}
       {!user && <LoginPage onLogin={u=>{setUser(u);setActive(u.acesso[0]||"dashboard");addAuditLog(u,"Login no sistema","Login");}}/>}
@@ -5449,9 +5421,18 @@ export default function App() {
           {active==="dashboard"   && <DashboardPage data={filteredOps} isReal={isReal} onNav={setActive} agenda={filteredAgenda} tratativas={filteredTrat}/>}
           {active==="operadores"  && <OperadoresPage operators={ops} onVerFicha={(op)=>{ setSelectedOp(op); setActive("ficha"); }}/>}
           {active==="ficha"       && <FichaPage op={selectedOp} onBack={()=>setActive("operadores")} globalCustos={custos} onSaveCustos={setCust}/>}
-          {active==="mentoria"    && <MentoriaPage operators={ops} sessions={sessions} onSave={s=>{
+          {active==="mentoria"    && <MentoriaPage operators={ops} sessions={sessions}
+  onDelete={id=>{
+    setSess(prev=>prev.filter(s=>s.id!==id));
+    audit("Sessão de mentoria apagada (id:"+id+")", "Apagou");
+  }}
+  onUpdate={updated=>{
+    setSess(prev=>prev.map(s=>s.id===updated.id?{...s,...updated}:s));
+    audit("Sessão de mentoria editada: "+updated.nome+" ("+updated.re+")", "Editou");
+  }}
+  onSave={s=>{
   setSess(prev=>[...prev,s]);
-  audit("Nova sessao de mentoria: "+s.nome+" ("+s.re+")", "Criou");
+  audit("Nova sessão de mentoria: "+s.nome+" ("+s.re+")", "Criou");
   if(s.setor && s.setor.trim() !== "" && s.setor !== "–"){
     const t={
       id:Date.now()+1, re:s.re, nome:s.nome,
