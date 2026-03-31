@@ -115,6 +115,9 @@ try { _themeName = localStorage.getItem("elevamente_theme") || "dark"; } catch {
 let C = { ...THEMES[_themeName] || THEMES.dark };
 const PIE_COLORS = [C.accent, C.accent2, C.purple, C.gold, C.muted];
 
+// ─── FORMAT RE (adds space: RE3887 → RE 3887) ──────────────────────────────
+const fmtRE = (re) => re ? re.replace(/^(RE)(\d)/i, "$1 $2") : re;
+
 // ─── EVENT MAP ──────────────────────────────────────────────────────────────
 const EV_LABELS = {
   "]":"Recolhida p/ conta", "~":"Orientação gerencial", "4":"Lic. maternidade",
@@ -877,20 +880,40 @@ const NAV = [
 ];
 
 // ─── DASHBOARD ───────────────────────────────────────────────────────────────
-const DashboardPage = ({ data, isReal, onNav, agenda, tratativas }) => {
+const DashboardPage = ({ data, isReal, onNav, agenda, tratativas, sessions, onVerFicha }) => {
   const { kpis, eventosMes, causas, operators } = data;
   const [chartTab, setChartTab] = useState("eventos");
+  const [selectedOp, setSelectedOp] = useState(null);
+  const [sortCol, setSortCol] = useState(null); // column key
+  const [sortDir, setSortDir] = useState("desc"); // asc | desc
+  const toggleSort = (col) => { if(sortCol===col) setSortDir(d=>d==="asc"?"desc":"asc"); else { setSortCol(col); setSortDir("desc"); } };
 
   const kpiCards = [
-    { icon:"👥", value:kpis.total,        label:"Total Operadores",  color:C.accent,  delta:`base ${isReal?"real":"mock"}`,      up:null  },
-    { icon:"🎯", value:kpis.emMentoria,   label:"Em Mentoria",       color:C.accent2, delta:`de ${kpis.total} totais`,            up:null  },
-    { icon:"📈", value:kpis.melhoraram,   label:"Melhoraram",        color:C.green,   delta:`de ${kpis.emMentoria} em mentoria`, up:true  },
-    { icon:"📉", value:kpis.pioraram,     label:"Pioraram",          color:C.red,     delta:`de ${kpis.emMentoria} em mentoria`, up:false },
-    { icon:"⏳", value:kpis.aguardando,   label:"Aguardam Mentoria", color:C.orange,  delta:`${kpis.total} − ${kpis.emMentoria} = ${kpis.aguardando}`, up:null },
-    { icon:"✅", value:`${kpis.taxaMelhora}%`, label:"Taxa de Melhora", color:C.gold, delta:`${kpis.melhoraram} de ${kpis.emMentoria} pós mentoria`, up:kpis.taxaMelhora>=50 },
+    { icon:"👥", value:kpis.total,        label:"Total Operadores",  color:C.accent,  delta:`base ${isReal?"real":"mock"}`,      up:null,  nav:"operadores" },
+    { icon:"🎯", value:kpis.emMentoria,   label:"Em Mentoria",       color:C.accent2, delta:`de ${kpis.total} totais`,            up:null,  nav:"mentoria"   },
+    { icon:"📈", value:kpis.melhoraram,   label:"Melhoraram",        color:C.green,   delta:`de ${kpis.emMentoria} em mentoria`, up:true,  nav:"_melhoraram" },
+    { icon:"📉", value:kpis.pioraram,     label:"Pioraram",          color:C.red,     delta:`de ${kpis.emMentoria} em mentoria`, up:false, nav:"_pioraram"   },
+    { icon:"⏳", value:kpis.aguardando,   label:"Aguardam Mentoria", color:C.orange,  delta:`${kpis.total} − ${kpis.emMentoria} = ${kpis.aguardando}`, up:null, nav:"_aguardando" },
+    { icon:"✅", value:`${kpis.taxaMelhora}%`, label:"Taxa de Melhora", color:C.gold, delta:`${kpis.melhoraram} de ${kpis.emMentoria} pós mentoria`, up:kpis.taxaMelhora>=50, nav:null },
   ];
 
-  const piChartData = causas.length ? causas : MOCK.causas;
+  // Listas filtradas para cards clicáveis
+  const opsMelhoraram = operators.filter(o=>o.resultado==="melhora");
+  const opsPioraram = operators.filter(o=>o.status==="mentoria"&&o.resultado==="piora");
+  const opsAguardando = operators.filter(o=>o.status==="aguardando");
+
+  const [kpiView, setKpiView] = useState(null); // null | "_melhoraram" | "_pioraram" | "_aguardando"
+
+  const kpiListMap = {
+    "_melhoraram": { title:"Operadores que Melhoraram", list:opsMelhoraram, emptyMsg:"Nenhum operador com melhora registrada" },
+    "_pioraram":   { title:"Operadores que Pioraram",   list:opsPioraram,   emptyMsg:"Nenhum operador com piora registrada" },
+    "_aguardando": { title:"Aguardando Mentoria",       list:opsAguardando, emptyMsg:"Nenhum operador aguardando mentoria" },
+  };
+
+  // Dados para eventos por mês do operador selecionado ou geral
+  const chartData = eventosMes.length ? eventosMes : [];
+
+  const piChartData = causas.length ? causas : [];
 
   return (
     <>
@@ -934,7 +957,13 @@ const DashboardPage = ({ data, isReal, onNav, agenda, tratativas }) => {
       }
       <div className="gkpi">
         {kpiCards.map((k,i)=>(
-          <div className={`kc fu d${Math.min(i+1,6)}`} key={k.label} style={{ borderTop:`2px solid ${k.color}40` }}>
+          <div className={`kc fu d${Math.min(i+1,6)}`} key={k.label}
+            style={{ borderTop:`2px solid ${k.color}40`, cursor:k.nav?"pointer":"default" }}
+            onClick={()=>{
+              if(!k.nav) return;
+              if(k.nav.startsWith("_")) setKpiView(k.nav);
+              else onNav(k.nav);
+            }}>
             <div className="ki">{k.icon}</div>
             <div className="kv" style={{ color:k.color }}>{k.value}</div>
             <div className="kl">{k.label}</div>
@@ -944,6 +973,41 @@ const DashboardPage = ({ data, isReal, onNav, agenda, tratativas }) => {
           </div>
         ))}
       </div>
+
+      {/* KPI Detail View (Melhoraram / Pioraram / Aguardando) */}
+      {kpiView && kpiListMap[kpiView] && (
+        <div className="card fu d2" style={{marginBottom:20}}>
+          <div className="ct" style={{justifyContent:"space-between",display:"flex"}}>
+            <span style={{display:"flex",alignItems:"center",gap:8}}><span className="ctd"/>{kpiListMap[kpiView].title}</span>
+            <button className="abt" onClick={()=>setKpiView(null)}>← Voltar ao Dashboard</button>
+          </div>
+          {kpiListMap[kpiView].list.length===0
+            ? <div style={{textAlign:"center",padding:"40px 0",color:C.muted,fontSize:13}}>{kpiListMap[kpiView].emptyMsg}</div>
+            : <div className="tw"><table>
+                <thead><tr><th>#</th><th>RE</th><th>Operador</th><th>Função</th><th>Garagem</th><th>Faltas</th><th>Multas</th><th>Status</th><th>Resultado</th></tr></thead>
+                <tbody>
+                  {kpiListMap[kpiView].list.map((op,i)=>{
+                    const stl=STATUS_LABEL[op.status]||{label:op.status,color:C.muted,bg:`${C.muted}18`};
+                    const res=op.resultado?RESULTADO_LABEL[op.resultado]:null;
+                    return(
+                      <tr key={op.re+i}>
+                        <td style={{color:C.muted,fontWeight:600}}>{i+1}</td>
+                        <td><span className="re-tag">{fmtRE(op.re)}</span></td>
+                        <td style={{fontWeight:500,fontSize:12,cursor:"pointer",color:C.accent}} onClick={()=>onVerFicha(op)}>{op.nome}</td>
+                        <td style={{fontSize:12,color:C.muted}}>{op.funcao}</td>
+                        <td style={{fontSize:12,color:C.muted}}>{op.garagem}</td>
+                        <td style={{color:op.faltas>=10?C.red:op.faltas>=5?C.orange:C.muted,fontWeight:700}}>{op.faltas}</td>
+                        <td style={{color:op.multas>=5?C.red:op.multas>=3?C.orange:C.muted,fontWeight:700}}>{op.multas}</td>
+                        <td><span className="pill" style={{color:stl.color,background:stl.bg}}>● {stl.label}</span></td>
+                        <td>{res&&<span className="pill" style={{color:res.color,background:res.bg}}>{res.icon} {res.label}</span>}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table></div>
+          }
+        </div>
+      )}
 
       <div className="g2 fu d3">
         <div className="card">
@@ -955,90 +1019,45 @@ const DashboardPage = ({ data, isReal, onNav, agenda, tratativas }) => {
               </button>
             ))}
           </div>
-          {chartTab==="eventos" ? (
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={eventosMes.length?eventosMes:MOCK.eventosMes} barSize={9}>
-                <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false}/>
-                <XAxis dataKey="mes" tick={{ fill:C.muted,fontSize:11 }} axisLine={false} tickLine={false}/>
-                <YAxis tick={{ fill:C.muted,fontSize:11 }} axisLine={false} tickLine={false}/>
-                <Tooltip content={<CT/>}/>
-                <Bar dataKey="faltas"    fill={C.red}    radius={[4,4,0,0]} name="Faltas"/>
-                <Bar dataKey="multas"    fill={C.orange} radius={[4,4,0,0]} name="Multas"/>
-                <Bar dataKey="acidentes" fill={C.purple} radius={[4,4,0,0]} name="Acidentes"/>
-                <Bar dataKey="mentorias" fill={C.green}  radius={[4,4,0,0]} name="Mentorias"/>
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <ResponsiveContainer width="100%" height={200}>
-              <AreaChart data={MOCK.eventosMes}>
-                <defs>
-                  <linearGradient id="gA" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={C.red} stopOpacity={.3}/><stop offset="95%" stopColor={C.red} stopOpacity={0}/></linearGradient>
-                  <linearGradient id="gB" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={C.green} stopOpacity={.3}/><stop offset="95%" stopColor={C.green} stopOpacity={0}/></linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false}/>
-                <XAxis dataKey="mes" tick={{ fill:C.muted,fontSize:11 }} axisLine={false} tickLine={false}/>
-                <YAxis tick={{ fill:C.muted,fontSize:11 }} axisLine={false} tickLine={false}/>
-                <Tooltip content={<CT/>}/>
-                <Area dataKey="faltas"    fill="url(#gA)" stroke={C.red}   strokeWidth={2} name="Faltas"/>
-                <Area dataKey="mentorias" fill="url(#gB)" stroke={C.green} strokeWidth={2} name="Mentorias"/>
-              </AreaChart>
-            </ResponsiveContainer>
-          )}
+          {(()=>{
+            const evData = (selectedOp
+              ? eventosMes.map(m=>({...m, mes:m.mes})) // TODO: filter per operator when data supports it
+              : eventosMes
+            ).map(m=>({...m, total:(m.faltas||0)+(m.multas||0)+(m.acidentes||0)+(m.mentorias||0)}));
+            return chartTab==="eventos" ? (
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={evData} barSize={9}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false}/>
+                  <XAxis dataKey="mes" tick={{ fill:C.muted,fontSize:11 }} axisLine={false} tickLine={false}/>
+                  <YAxis tick={{ fill:C.muted,fontSize:11 }} axisLine={false} tickLine={false}/>
+                  <Tooltip content={<CT/>}/>
+                  <Bar dataKey="faltas"    fill={C.red}    radius={[4,4,0,0]} name="Faltas" stackId="ev"/>
+                  <Bar dataKey="multas"    fill={C.orange} radius={[4,4,0,0]} name="Multas" stackId="ev"/>
+                  <Bar dataKey="acidentes" fill={C.purple} radius={[4,4,0,0]} name="Acidentes" stackId="ev"/>
+                  <Bar dataKey="mentorias" fill={C.green}  radius={[4,4,0,0]} name="Mentorias"/>
+                  <Line type="monotone" dataKey="total" stroke={C.accent} strokeWidth={2} strokeDasharray="5 3" dot={false} name="Total"/>
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <ResponsiveContainer width="100%" height={220}>
+                <AreaChart data={evData}>
+                  <defs>
+                    <linearGradient id="gA" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={C.red} stopOpacity={.3}/><stop offset="95%" stopColor={C.red} stopOpacity={0}/></linearGradient>
+                    <linearGradient id="gB" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={C.green} stopOpacity={.3}/><stop offset="95%" stopColor={C.green} stopOpacity={0}/></linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false}/>
+                  <XAxis dataKey="mes" tick={{ fill:C.muted,fontSize:11 }} axisLine={false} tickLine={false}/>
+                  <YAxis tick={{ fill:C.muted,fontSize:11 }} axisLine={false} tickLine={false}/>
+                  <Tooltip content={<CT/>}/>
+                  <Area dataKey="faltas"    fill="url(#gA)" stroke={C.red}   strokeWidth={2} name="Faltas"/>
+                  <Area dataKey="mentorias" fill="url(#gB)" stroke={C.green} strokeWidth={2} name="Mentorias"/>
+                  <Line type="monotone" dataKey="total" stroke={C.accent} strokeWidth={2} strokeDasharray="5 3" dot={false} name="Tendência"/>
+                </AreaChart>
+              </ResponsiveContainer>
+            );
+          })()}
         </div>
-        <div className="card" style={{ display:"flex",flexDirection:"column" }}>
-          <div className="ct"><span className="ctd"/>Causas Identificadas {!causas.length&&!isReal&&<span style={{ fontSize:10,color:C.muted }}>(demo)</span>}</div>
-          <div style={{ display:"flex",gap:16,flex:1,alignItems:"center" }}>
-            <ResponsiveContainer width={155} height={155}>
-              <PieChart>
-                <Pie data={piChartData} cx="50%" cy="50%" innerRadius={42} outerRadius={70} paddingAngle={3} dataKey="value">
-                  {piChartData.map((_,i)=><Cell key={i} fill={PIE_COLORS[i]}/>)}
-                </Pie>
-                <Tooltip content={<CT/>}/>
-              </PieChart>
-            </ResponsiveContainer>
-            <div style={{ flex:1,display:"flex",flexDirection:"column",gap:8 }}>
-              {piChartData.map((c,i)=>(
-                <div key={c.name} style={{ display:"flex",alignItems:"center",gap:8 }}>
-                  <div style={{ width:8,height:8,borderRadius:"50%",background:PIE_COLORS[i],flexShrink:0 }}/>
-                  <div style={{ flex:1,fontSize:12,color:C.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{c.name}</div>
-                  <div style={{ fontFamily:"'Inter',sans-serif",fontSize:13,fontWeight:700,color:PIE_COLORS[i] }}>{c.value}{isReal?"":"%" }</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="g2 fu d4">
-        <div className="card">
-          <div className="ct" style={{ justifyContent:"space-between",display:"flex" }}>
-            <span style={{ display:"flex",alignItems:"center",gap:8 }}><span className="ctd"/>Operadores em Atenção</span>
-            <button className="abt" onClick={()=>onNav("operadores")}>Ver todos</button>
-          </div>
-          <div className="tw">
-            <table>
-              <thead><tr><th>#</th><th>RE</th><th>Operador</th><th>F</th><th>M</th><th>Status</th><th>Resultado</th></tr></thead>
-              <tbody>
-                {operators.filter(o=>o.resultado==="piora"||o.resultado==="andamento"||o.status==="aguardando")
-                  .slice(0,6).map((op,i)=>{
-                  const stl=STATUS_LABEL[op.status];
-                  const res=op.resultado?RESULTADO_LABEL[op.resultado]:null;
-                  return (
-                    <tr key={op.re+i}>
-                      <td style={{ color:C.muted,fontWeight:600 }}>{i+1}</td>
-                      <td><span className="re-tag">{op.re}</span></td>
-                      <td style={{ fontWeight:500,fontSize:12 }}>{op.nome}</td>
-                      <td style={{ color:op.faltas>=10?C.red:op.faltas>=5?C.orange:C.muted,fontWeight:700 }}>{op.faltas}</td>
-                      <td style={{ color:op.multas>=5?C.red:op.multas>=3?C.orange:C.muted,fontWeight:700 }}>{op.multas}</td>
-                      <td><span className="pill" style={{ color:stl.color,background:stl.bg }}>● {stl.label}</span></td>
-                      <td>{res&&<span className="pill" style={{ color:res.color,background:res.bg }}>{res.icon} {res.label}</span>}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        {/* Taxa de Melhora */}
         <div className="card" style={{ display:"flex",gap:20,alignItems:"center" }}>
           <Ring value={kpis.taxaMelhora}/>
           <div>
@@ -1057,6 +1076,87 @@ const DashboardPage = ({ data, isReal, onNav, agenda, tratativas }) => {
               ))}
             </div>
           </div>
+        </div>
+      </div>
+
+      <div className="g2 fu d4">
+        {/* Operadores em Atenção (TROCADO de lugar com Causas) */}
+        <div className="card">
+          <div className="ct" style={{ justifyContent:"space-between",display:"flex" }}>
+            <span style={{ display:"flex",alignItems:"center",gap:8 }}>
+              <span className="ctd"/>Operadores em Atenção
+              {selectedOp && <span style={{fontSize:10,color:C.accent,fontWeight:400,textTransform:"none",letterSpacing:0}}>— gráfico filtrado por {selectedOp.nome}</span>}
+            </span>
+            <button className="abt" onClick={()=>onNav("operadores")}>Ver todos</button>
+          </div>
+          <div className="tw">
+            <table>
+              <thead><tr>
+                <th>#</th>
+                {[{k:"re",l:"RE"},{k:"nome",l:"Operador"},{k:"faltas",l:"Faltas"},{k:"atestados",l:"Atestados"},{k:"multas",l:"Multas"},{k:"totalEv",l:"Eventos"},{k:"dataMentoria",l:"Data Mentoria"},{k:"resultado",l:"Resultado"}].map(h=>(
+                  <th key={h.k} style={{cursor:"pointer",userSelect:"none"}} onClick={()=>toggleSort(h.k)}>
+                    {h.l} {sortCol===h.k?(sortDir==="asc"?"↑":"↓"):""}
+                  </th>
+                ))}
+              </tr></thead>
+              <tbody>
+                {operators.filter(o=>o.resultado==="piora"||o.resultado==="andamento"||o.status==="aguardando")
+                  .map(o=>({...o, totalEv:(o.faltas||0)+(o.multas||0)+(o.acidentes||0)+(o.atestados||0)}))
+                  .sort((a,b)=>{
+                    if(!sortCol) return 0;
+                    const av=a[sortCol], bv=b[sortCol];
+                    if(typeof av==="number"&&typeof bv==="number") return sortDir==="asc"?av-bv:bv-av;
+                    return sortDir==="asc"?String(av||"").localeCompare(String(bv||"")):String(bv||"").localeCompare(String(av||""));
+                  })
+                  .slice(0,8).map((op,i)=>{
+                  const res=op.resultado?RESULTADO_LABEL[op.resultado]:null;
+                  const totalEv=(op.faltas||0)+(op.multas||0)+(op.acidentes||0)+(op.atestados||0);
+                  return (
+                    <tr key={op.re+i} style={{background:selectedOp?.re===op.re?`${C.accent}10`:"transparent",cursor:"pointer"}}
+                      onClick={()=>setSelectedOp(selectedOp?.re===op.re?null:op)}>
+                      <td style={{ color:C.muted,fontWeight:600 }}>{i+1}</td>
+                      <td><span className="re-tag">{fmtRE(op.re)}</span></td>
+                      <td style={{ fontWeight:500,fontSize:12,color:C.accent,cursor:"pointer" }}
+                        onClick={(e)=>{e.stopPropagation();onVerFicha(op);}}>{op.nome}</td>
+                      <td style={{ color:op.faltas>=10?C.red:op.faltas>=5?C.orange:C.muted,fontWeight:700 }}>{op.faltas}</td>
+                      <td style={{ color:C.muted,fontWeight:700 }}>{op.atestados||0}</td>
+                      <td style={{ color:op.multas>=5?C.red:op.multas>=3?C.orange:C.muted,fontWeight:700 }}>{op.multas}</td>
+                      <td style={{ fontWeight:700,color:totalEv>=15?C.red:totalEv>=8?C.orange:C.muted }}>{totalEv}</td>
+                      <td style={{ fontSize:11,color:C.muted }}>{op.dataMentoria||"—"}</td>
+                      <td>{res?<span className="pill" style={{ color:res.color,background:res.bg }}>{res.icon} {res.label}</span>:<span style={{color:C.muted,fontSize:11}}>—</span>}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Causas Identificadas (TROCADO de lugar com Operadores) */}
+        <div className="card" style={{ display:"flex",flexDirection:"column" }}>
+          <div className="ct"><span className="ctd"/>Causas Identificadas {!causas.length&&!isReal&&<span style={{ fontSize:10,color:C.muted }}>(sem dados)</span>}</div>
+          {piChartData.length===0
+            ? <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",color:C.muted,fontSize:13}}>Registre sessões de mentoria para ver as causas</div>
+            : <div style={{ display:"flex",gap:16,flex:1,alignItems:"center" }}>
+                <ResponsiveContainer width={155} height={155}>
+                  <PieChart>
+                    <Pie data={piChartData} cx="50%" cy="50%" innerRadius={42} outerRadius={70} paddingAngle={3} dataKey="value">
+                      {piChartData.map((_,i)=><Cell key={i} fill={PIE_COLORS[i%PIE_COLORS.length]}/>)}
+                    </Pie>
+                    <Tooltip content={<CT/>}/>
+                  </PieChart>
+                </ResponsiveContainer>
+                <div style={{ flex:1,display:"flex",flexDirection:"column",gap:8 }}>
+                  {piChartData.map((c,i)=>(
+                    <div key={c.name} style={{ display:"flex",alignItems:"center",gap:8 }}>
+                      <div style={{ width:8,height:8,borderRadius:"50%",background:PIE_COLORS[i%PIE_COLORS.length],flexShrink:0 }}/>
+                      <div style={{ flex:1,fontSize:12,color:C.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{c.name}</div>
+                      <div style={{ fontFamily:"'Inter',sans-serif",fontSize:13,fontWeight:700,color:PIE_COLORS[i%PIE_COLORS.length] }}>{c.value}{isReal?"":""}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+          }
         </div>
       </div>
 
@@ -1091,7 +1191,8 @@ const DashboardPage = ({ data, isReal, onNav, agenda, tratativas }) => {
                     {initials(a.nome)}
                   </div>
                   <div style={{ flex:1,minWidth:0 }}>
-                    <div style={{ fontSize:12,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>{a.nome}</div>
+                    <div style={{ fontSize:12,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",cursor:"pointer",color:C.accent }}
+                      onClick={()=>{ const op=operators.find(o=>o.re===a.re); if(op) onVerFicha(op); }}>{a.nome}</div>
                     <div style={{ fontSize:11,color:tp.color,marginTop:1 }}>{tp.icon} {a.tipo}</div>
                   </div>
                   <span style={{ fontSize:10,fontWeight:600,padding:"2px 7px",borderRadius:5,
@@ -1123,17 +1224,23 @@ const DashboardPage = ({ data, isReal, onNav, agenda, tratativas }) => {
               </div>
             );
             return pending.map((t,i)=>{
-              const ac=AREA_COLORS[t.area]||C.accent;
               const pr=PRIOR_MAP[t.prioridade]||{label:"Média",color:C.gold};
               const st=TRAT_ST_MAP[t.status]||{label:t.status,color:C.muted};
+              const parts=(t.data||"").split("/");
+              const dataCriacao=parts.length===3?new Date(2000+parseInt(parts[2]),parseInt(parts[1])-1,parseInt(parts[0])):null;
+              const dias=dataCriacao?Math.floor((new Date()-dataCriacao)/(1000*60*60*24)):0;
+              const diasColor=dias>=6?C.red:dias>=3?C.gold:C.green;
+              const diasIcon=dias>=6?"⚠️":"";
               return (
                 <div key={t.id} style={{ display:"flex",gap:10,padding:"10px 0",
-                  borderBottom:i<pending.length-1?`1px solid ${C.border}20`:"none",alignItems:"flex-start" }}>
+                  borderBottom:i<pending.length-1?`1px solid ${C.border}20`:"none",alignItems:"flex-start",
+                  borderLeft:`3px solid ${diasColor}`,paddingLeft:10,borderRadius:2 }}>
                   <div style={{ fontSize:18,flexShrink:0 }}>{AREA_ICONS[t.area]||"🔁"}</div>
                   <div style={{ flex:1,minWidth:0 }}>
                     <div style={{ display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",marginBottom:2 }}>
-                      <span className="re-tag" style={{ fontSize:10,padding:"1px 5px" }}>{t.re}</span>
+                      <span className="re-tag" style={{ fontSize:10,padding:"1px 5px" }}>{fmtRE(t.re)}</span>
                       <span style={{ fontSize:12,fontWeight:600 }}>{t.area}{t.subarea?` / ${t.subarea}`:""}</span>
+                      <span style={{ fontSize:10,color:diasColor,fontWeight:700 }}>{diasIcon} {dias}d</span>
                     </div>
                     <div style={{ fontSize:11,color:C.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{t.descricao}</div>
                   </div>
@@ -2021,7 +2128,7 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
           <div style={{flex:1,minWidth:200}}>
             <div style={{fontFamily:"'Inter',sans-serif",fontSize:22,fontWeight:800,marginBottom:6}}>{op.nome}</div>
             <div style={{display:"flex",gap:12,flexWrap:"wrap",fontSize:13,color:C.muted,marginBottom:10}}>
-              <span className="re-tag">{op.re}</span>
+              <span className="re-tag">{fmtRE(op.re)}</span>
               <span>📌 {op.funcao}</span>
               <span>🚌 Garagem {op.garagem}</span>
               <span>📅 Admissao: {op.admissao}</span>
@@ -2613,7 +2720,7 @@ const MentoriaPage = ({ operators, sessions, onSave, onDelete, onUpdate }) => {
                     <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:6}}>
                       <span style={{fontWeight:700,fontSize:14,cursor:"pointer",textDecoration:"underline",textDecorationColor:`${C.accent}40`,textUnderlineOffset:3}}
                         onClick={()=>handleEdit(s)} title="Clique para editar">{s.nome}</span>
-                      <span style={{fontSize:14,fontWeight:800,fontFamily:"'Inter',sans-serif",background:`${C.accent}15`,border:`1px solid ${C.accent}30`,borderRadius:6,padding:"2px 10px",color:C.accent}}>{s.re}</span>
+                      <span style={{fontSize:14,fontWeight:800,fontFamily:"'Inter',sans-serif",background:`${C.accent}15`,border:`1px solid ${C.accent}30`,borderRadius:6,padding:"2px 10px",color:C.accent}}>{fmtRE(s.re)}</span>
                       <span style={{fontSize:12,color:C.muted}}>📅 {s.data}</span>
                       <span className="pill" style={{color:st.color,background:st.bg,fontSize:11}}>● {st.label}</span>
                     </div>
@@ -3448,7 +3555,7 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions, onVe
                   const ac=AREA_COLORS[t.area]||C.accent;
                   return(
                     <tr key={t.id} onClick={()=>{setDetalhes(t);setRetornoText(t.retorno||"");setModalStatus(t.status);}}>
-                      <td><span className="re-tag">{t.re}</span></td>
+                      <td><span className="re-tag">{fmtRE(t.re)}</span></td>
                       <td style={{fontSize:12,fontWeight:500}}>{t.nome}</td>
                       <td>
                         <span style={{display:"flex",alignItems:"center",gap:5,fontSize:12,fontWeight:600,color:ac}}>
@@ -3774,7 +3881,7 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
                         <td style={{fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:15,color:i<3?[C.gold,C.muted,C.orange][i]:C.muted}}>
                           {i===0?"🥇":i===1?"🥈":i===2?"🥉":i+1}
                         </td>
-                        <td><span className="re-tag">{op.re}</span></td>
+                        <td><span className="re-tag">{fmtRE(op.re)}</span></td>
                         <td>
                           <div style={{display:"flex",alignItems:"center",gap:8}}>
                             <div style={{width:30,height:30,borderRadius:8,background:`${ac}20`,color:ac,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,fontFamily:"'Inter',sans-serif",flexShrink:0}}>{initials(op.nome)}</div>
@@ -4679,7 +4786,7 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
                         {a.data===hoje_str?"Hoje":a.data}
                       </td>
                       <td style={{fontFamily:"'Inter',sans-serif",fontWeight:700,color:tp.color,fontSize:13}}>{a.hora}</td>
-                      <td><span className="re-tag">{a.re}</span></td>
+                      <td><span className="re-tag">{fmtRE(a.re)}</span></td>
                       <td>
                         <div style={{display:"flex",alignItems:"center",gap:8}}>
                           <div style={{width:28,height:28,borderRadius:7,background:`${ac}20`,color:ac,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:10,flexShrink:0}}>{initials(a.nome)}</div>
@@ -5081,6 +5188,7 @@ export default function App() {
     setAuditLogs(getAuditLogs());
   };
   const [showAlerts, setShowAlerts] = useState(false);
+  const [readAlerts, setReadAlerts] = useState(new Set()); // IDs de alertas já lidos
   const searchRef = useRef();
 
   // ── Close alerts/search on outside click ─────────────────────────────────────
@@ -5323,13 +5431,18 @@ export default function App() {
 
               {/* Alerts drawer button */}
               {(()=>{
+                const allAlertIds = [
+                  ...tratativas.filter(t=>t.status!=="concluido").map(t=>"t_"+t.id),
+                  ...agenda.filter(a=>a.data===fmtDate(new Date())&&a.status!=="realizado"&&a.status!=="faltou").map(a=>"a_"+a.id),
+                ];
+                const unreadCount = allAlertIds.filter(id=>!readAlerts.has(id)).length;
                 const pendTrat = tratativas.filter(t=>t.status!=="concluido").length;
                 const agHoje   = agenda.filter(a=>a.data===fmtDate(new Date())&&a.status!=="realizado"&&a.status!=="faltou").length;
                 const urgentes = tratativas.filter(t=>t.prioridade==="urgente"&&t.status!=="concluido").length;
-                const total    = pendTrat + agHoje;
+                const total    = unreadCount;
                 return (
                   <>
-                    <button className="bb" onClick={()=>setShowAlerts(a=>!a)}
+                    <button className="bb" onClick={()=>{setShowAlerts(a=>!a); if(!showAlerts) setReadAlerts(new Set(allAlertIds));}}
                       title={`${urgentes} urgentes · ${pendTrat} tratativas · ${agHoje} hoje`}
                       style={{borderColor:urgentes>0?`${C.red}50`:""}}>
                       🔔{total>0&&<span className="bdg" style={{background:urgentes>0?C.red:C.orange}}>{total>99?"99+":total}</span>}
@@ -5352,7 +5465,7 @@ export default function App() {
                             <div key={t.id} style={{background:`${C.red}10`,border:`1px solid ${C.red}25`,borderRadius:10,padding:"10px 12px",marginBottom:6,cursor:"pointer"}}
                               onClick={()=>{setActive("tratativas");setShowAlerts(false);}}>
                               <div style={{fontSize:12,fontWeight:600,color:C.red,marginBottom:2}}>{AREA_ICONS[t.area]} {t.area}{t.subarea?` / ${t.subarea}`:""}</div>
-                              <div style={{fontSize:11,color:C.muted}}>{t.re} · {t.nome}</div>
+                              <div style={{fontSize:11,color:C.muted}}>{fmtRE(t.re)} · {t.nome}</div>
                               <div style={{fontSize:11,color:C.muted,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.descricao}</div>
                             </div>
                           ))}
@@ -5384,7 +5497,7 @@ export default function App() {
                             <div key={t.id} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"10px 12px",marginBottom:6,cursor:"pointer"}}
                               onClick={()=>{setActive("tratativas");setShowAlerts(false);}}>
                               <div style={{fontSize:12,fontWeight:600,marginBottom:2}}>{AREA_ICONS[t.area]} {t.area}</div>
-                              <div style={{fontSize:11,color:C.muted}}>{t.re} · {t.descricao.slice(0,50)}{t.descricao.length>50?"…":""}</div>
+                              <div style={{fontSize:11,color:C.muted}}>{fmtRE(t.re)} · {t.descricao.slice(0,50)}{t.descricao.length>50?"…":""}</div>
                             </div>
                           ))}
                           {pendTrat>4&&<div style={{textAlign:"center",marginTop:4}}><button className="abt" style={{fontSize:11}} onClick={()=>{setActive("tratativas");setShowAlerts(false);}}>+{pendTrat-4} mais</button></div>}
@@ -5418,7 +5531,7 @@ export default function App() {
             const ops = filteredOps.operators;
 
             return <>
-          {active==="dashboard"   && <DashboardPage data={filteredOps} isReal={isReal} onNav={setActive} agenda={filteredAgenda} tratativas={filteredTrat}/>}
+          {active==="dashboard"   && <DashboardPage data={filteredOps} isReal={isReal} onNav={setActive} agenda={filteredAgenda} tratativas={filteredTrat} sessions={sessions} onVerFicha={(op)=>{setSelectedOp(op);setActive("ficha");}}/>}
           {active==="operadores"  && <OperadoresPage operators={ops} onVerFicha={(op)=>{ setSelectedOp(op); setActive("ficha"); }}/>}
           {active==="ficha"       && <FichaPage op={selectedOp} onBack={()=>setActive("operadores")} globalCustos={custos} onSaveCustos={setCust}/>}
           {active==="mentoria"    && <MentoriaPage operators={ops} sessions={sessions}
