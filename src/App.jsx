@@ -48,19 +48,13 @@ const THEMES = {
     bg:"#0A0F1E", surface:"#111827", card:"#151E2E", border:"#1E2D42",
     accent:"#00D4FF", accent2:"#0091FF", gold:"#F59E0B", green:"#10B981",
     red:"#EF4444", orange:"#F97316", purple:"#8B5CF6", text:"#E2E8F0", muted:"#64748B",
-    label:"🌙 Dark",
-  },
-  normal: {
-    bg:"#0F172A", surface:"#1E293B", card:"#1E2D42", border:"#334155",
-    accent:"#38BDF8", accent2:"#0EA5E9", gold:"#FBBF24", green:"#34D399",
-    red:"#F87171", orange:"#FB923C", purple:"#A78BFA", text:"#F1F5F9", muted:"#94A3B8",
-    label:"🌤 Normal",
+    label:"🌙 Apagar",
   },
   light: {
-    bg:"#F8FAFC", surface:"#FFFFFF", card:"#FFFFFF", border:"#E2E8F0",
+    bg:"#F3F4F6", surface:"#FFFFFF", card:"#FFFFFF", border:"#E5E7EB",
     accent:"#0284C7", accent2:"#0369A1", gold:"#D97706", green:"#059669",
-    red:"#DC2626", orange:"#EA580C", purple:"#7C3AED", text:"#0F172A", muted:"#64748B",
-    label:"🤍 Light",
+    red:"#DC2626", orange:"#EA580C", purple:"#7C3AED", text:"#111827", muted:"#6B7280",
+    label:"💡 Acender",
   },
 };
 
@@ -5343,17 +5337,12 @@ export default function App() {
               <div className="dchip mob-hide">{today}</div>
 
               {/* Theme switcher */}
-              <div style={{display:"flex",gap:2,background:C.surface,borderRadius:8,padding:3,border:`1px solid ${C.border}`}} className="mob-hide">
-                {Object.entries(THEMES).map(([key,t])=>(
-                  <button key={key} onClick={()=>handleThemeChange(key)}
-                    title={t.label}
-                    style={{padding:"4px 10px",borderRadius:6,border:"none",cursor:"pointer",fontSize:12,fontWeight:600,transition:"all .2s",
-                      background:themeName===key?C.accent:"transparent",
-                      color:themeName===key?"#000":C.muted}}>
-                    {t.label.split(" ")[0]}
-                  </button>
-                ))}
-              </div>
+              <button className="mob-hide" onClick={()=>handleThemeChange(themeName==="dark"?"light":"dark")}
+                title={themeName==="dark"?"Acender a luz":"Apagar a luz"}
+                style={{display:"flex",alignItems:"center",gap:6,padding:"6px 14px",borderRadius:8,border:`1px solid ${C.border}`,
+                  background:C.surface,cursor:"pointer",fontSize:13,fontWeight:600,transition:"all .2s",color:C.text}}>
+                {themeName==="dark"?"💡":"🌙"} <span>{themeName==="dark"?"Acender":"Apagar"}</span>
+              </button>
 
               <button className="abt" style={{ padding:"7px 14px",gap:6,display:"flex",alignItems:"center" }} onClick={()=>setActive("base")}>
                 <span style={{ width:8,height:8,borderRadius:"50%",background:isReal?C.green:C.orange,display:"inline-block" }}/>
