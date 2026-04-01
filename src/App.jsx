@@ -463,11 +463,18 @@ function processExcel(workbook) {
   // Debug: log what was found
   console.log("[Elevamente] Abas encontradas:", sheets);
   console.log("[Elevamente] Prontuario rows:", prontuario.length);
+  if (prontuario.length > 0) {
+    console.log("[Elevamente] Prontuario colunas:", Object.keys(prontuario[0]));
+    console.log("[Elevamente] Prontuario amostra (3 primeiras):", prontuario.slice(0,3));
+  }
+  console.log("[Elevamente] eventosMes:", eventosMes);
+  console.log("[Elevamente] evTypesSorted:", evTypesSorted);
   console.log("[Elevamente] Multas rows:", multas.length);
   console.log("[Elevamente] Acidentes rows:", acidentes.length);
   console.log("[Elevamente] Quadro rows:", quadro.length);
   console.log("[Elevamente] Presenca rows:", presenca.length);
   console.log("[Elevamente] Formulario rows:", formulario.length);
+  console.log("[Elevamente] Operators sample:", operators.slice(0,3).map(o=>({re:o.re,nome:o.nome,timeline:o.timeline?.length,faltas:o.faltas,multas:o.multas})));
 
   return { operators, kpis:{ total, emMentoria, melhoraram, pioraram, aguardando, taxaMelhora },
            eventosMes, evTypesSorted, causas, sheetSummary };
