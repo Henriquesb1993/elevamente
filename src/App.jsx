@@ -1263,9 +1263,9 @@ const DashboardPage = ({ data, isReal, onNav, agenda, tratativas, sessions, onVe
             </span>
             <button className="abt" onClick={()=>onNav("operadores")}>Ver todos</button>
           </div>
-          <div className="tw">
+          <div className="tw" style={{maxHeight:400,overflowY:"auto"}}>
             <table>
-              <thead><tr>
+              <thead style={{position:"sticky",top:0,zIndex:1}}><tr>
                 <th>#</th>
                 {[{k:"re",l:"RE"},{k:"nome",l:"Operador"},{k:"faltas",l:"Faltas"},{k:"atestados",l:"Atestados"},{k:"multas",l:"Multas"},{k:"totalEv",l:"Eventos"},{k:"mediaEvMes",l:"Média Ev/Mês"},{k:"evPosMentoria",l:"Ev pós mentoria"},{k:"dataMentoria",l:"Data Mentoria"},{k:"resultado",l:"Resultado"}].map(h=>(
                   <th key={h.k} style={{cursor:"pointer",userSelect:"none"}} onClick={()=>toggleSort(h.k)}>
@@ -1275,7 +1275,6 @@ const DashboardPage = ({ data, isReal, onNav, agenda, tratativas, sessions, onVe
               </tr></thead>
               <tbody>
                 {(()=>{
-                  // Helper to parse dd/mm/yy or dd/mm/yyyy
                   const pDt = (s) => {
                     if (!s) return null;
                     let p = s.match(/(\d{2})\/(\d{2})\/(\d{4})/);
@@ -1284,7 +1283,7 @@ const DashboardPage = ({ data, isReal, onNav, agenda, tratativas, sessions, onVe
                     if (p) { const y=+p[3]<50?2000+ +p[3]:1900+ +p[3]; return { date: new Date(y,+p[2]-1,+p[1]), mm: p[2]+"/"+y }; }
                     return null;
                   };
-                  return operators.filter(o=>o.resultado==="piora"||o.resultado==="andamento"||o.resultado==="realizou"||o.status==="aguardando")
+                  return operators
                   .map(o=>{
                     const totalEv=(o.faltas||0)+(o.multas||0)+(o.acidentes||0)+(o.atestados||0);
                     const tl=o.timeline||[];
@@ -1306,12 +1305,12 @@ const DashboardPage = ({ data, isReal, onNav, agenda, tratativas, sessions, onVe
                   })
                 })()
                   .sort((a,b)=>{
-                    if(!sortCol) return 0;
+                    if(!sortCol) return (b.totalEv||0)-(a.totalEv||0);
                     const av=a[sortCol], bv=b[sortCol];
                     if(typeof av==="number"&&typeof bv==="number") return sortDir==="asc"?av-bv:bv-av;
                     return sortDir==="asc"?String(av||"").localeCompare(String(bv||"")):String(bv||"").localeCompare(String(av||""));
                   })
-                  .slice(0,8).map((op,i)=>{
+                  .map((op,i)=>{
                   const res=op.resultado?RESULTADO_LABEL[op.resultado]:null;
                   return (
                     <tr key={op.re+i} style={{background:selectedOp?.re===op.re?`${C.accent}10`:"transparent",cursor:"pointer"}}
@@ -1335,31 +1334,76 @@ const DashboardPage = ({ data, isReal, onNav, agenda, tratativas, sessions, onVe
           </div>
         </div>
 
-        {/* Causas Identificadas (TROCADO de lugar com Operadores) */}
+        {/* Linha do Tempo — eventos do operador selecionado ou geral */}
         <div className="card" style={{ display:"flex",flexDirection:"column" }}>
-          <div className="ct"><span className="ctd"/>Causas Identificadas {!causas.length&&!isReal&&<span style={{ fontSize:10,color:C.muted }}>(sem dados)</span>}</div>
-          {piChartData.length===0
-            ? <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",color:C.muted,fontSize:13}}>Registre sessões de mentoria para ver as causas</div>
-            : <div style={{ display:"flex",gap:16,flex:1,alignItems:"center" }}>
-                <ResponsiveContainer width={155} height={155}>
-                  <PieChart>
-                    <Pie data={piChartData} cx="50%" cy="50%" innerRadius={42} outerRadius={70} paddingAngle={3} dataKey="value">
-                      {piChartData.map((_,i)=><Cell key={i} fill={PIE_COLORS[i%PIE_COLORS.length]}/>)}
-                    </Pie>
-                    <Tooltip content={<CT/>}/>
-                  </PieChart>
-                </ResponsiveContainer>
-                <div style={{ flex:1,display:"flex",flexDirection:"column",gap:8 }}>
-                  {piChartData.map((c,i)=>(
-                    <div key={c.name} style={{ display:"flex",alignItems:"center",gap:8 }}>
-                      <div style={{ width:8,height:8,borderRadius:"50%",background:PIE_COLORS[i%PIE_COLORS.length],flexShrink:0 }}/>
-                      <div style={{ flex:1,fontSize:12,color:C.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{c.name}</div>
-                      <div style={{ fontFamily:"'Inter',sans-serif",fontSize:13,fontWeight:700,color:PIE_COLORS[i%PIE_COLORS.length] }}>{c.value}{isReal?"":""}</div>
-                    </div>
-                  ))}
-                </div>
+          <div className="ct" style={{justifyContent:"space-between",display:"flex"}}>
+            <span style={{display:"flex",alignItems:"center",gap:8}}>
+              <span className="ctd"/>Linha do Tempo
+              {selectedOp && <span style={{fontSize:10,color:C.accent,fontWeight:400,textTransform:"none",letterSpacing:0}}>— {selectedOp.nome}</span>}
+            </span>
+            {selectedOp && <button onClick={()=>setSelectedOp(null)} style={{background:`${C.red}15`,border:`1px solid ${C.red}30`,borderRadius:6,padding:"3px 10px",fontSize:10,color:C.red,cursor:"pointer"}}>Limpar filtro</button>}
+          </div>
+          {(()=>{
+            // Get timeline: if operator selected, use their timeline; otherwise all operators
+            const pDt2 = (s) => {
+              if (!s) return null;
+              let p = s.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+              if (p) return new Date(+p[3],+p[2]-1,+p[1]);
+              p = s.match(/(\d{2})\/(\d{2})\/(\d{2})/);
+              if (p) { const y=+p[3]<50?2000+ +p[3]:1900+ +p[3]; return new Date(y,+p[2]-1,+p[1]); }
+              return null;
+            };
+            let tlEvents = [];
+            let mentoriaDateStr = null;
+            if (selectedOp) {
+              tlEvents = (selectedOp.timeline||[]).map(ev=>({...ev, nome: selectedOp.nome, re: selectedOp.re}));
+              mentoriaDateStr = selectedOp.dataMentoria;
+            } else {
+              operators.forEach(op=>{
+                (op.timeline||[]).forEach(ev=>{ tlEvents.push({...ev, nome: op.nome, re: op.re}); });
+              });
+            }
+            // Sort by date descending (most recent first)
+            tlEvents.sort((a,b)=>{
+              const da=pDt2(a.data), db=pDt2(b.data);
+              if(!da&&!db) return 0;
+              if(!da) return 1;
+              if(!db) return -1;
+              return db-da;
+            });
+            // Limit to 100 most recent
+            const shown = tlEvents.slice(0,100);
+            if (shown.length===0) return <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",color:C.muted,fontSize:13}}>{selectedOp?"Nenhum evento para este operador":"Selecione um operador para ver a linha do tempo"}</div>;
+            return (
+              <div style={{maxHeight:350,overflowY:"auto",flex:1}}>
+                <table style={{width:"100%"}}>
+                  <thead style={{position:"sticky",top:0,zIndex:1}}><tr>
+                    <th style={{width:80}}>Data</th>
+                    <th style={{width:30}}>EV</th>
+                    <th>Evento</th>
+                    {!selectedOp && <th>Operador</th>}
+                    <th>Historico</th>
+                  </tr></thead>
+                  <tbody>
+                    {shown.map((ev,i)=>{
+                      const isMentoria = ev.ev==="n";
+                      const cor = EV_COLOR[ev.ev]||C.muted;
+                      const isGreen = isMentoria || (mentoriaDateStr && ev.data===mentoriaDateStr && ev.ev==="n");
+                      return (
+                        <tr key={i} style={{background:isMentoria?`${C.green}15`:"transparent"}}>
+                          <td style={{fontSize:11,color:isMentoria?C.green:C.muted,fontWeight:isMentoria?700:400}}>{ev.data||"–"}</td>
+                          <td><span style={{fontFamily:"monospace",fontWeight:700,color:isMentoria?C.green:cor,background:`${isMentoria?C.green:cor}18`,padding:"1px 5px",borderRadius:3,fontSize:11}}>{ev.ev}</span></td>
+                          <td style={{fontSize:12,color:isMentoria?C.green:C.text,fontWeight:isMentoria?700:400}}>{isMentoria?"Mentoria realizada":ev.label||EV_LABELS[ev.ev]||ev.ev}</td>
+                          {!selectedOp && <td style={{fontSize:11,color:C.muted}}>{ev.nome}</td>}
+                          <td style={{fontSize:11,color:C.muted,maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ev.historico||"–"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
-          }
+            );
+          })()}
         </div>
       </div>
 
