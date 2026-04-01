@@ -1059,38 +1059,89 @@ const DashboardPage = ({ data, isReal, onNav, agenda, tratativas, sessions, onVe
             ))}
           </div>
           {(()=>{
-            // If operator selected, build per-month data from their timeline
+            // Palette for EV types not in EV_COLOR
+            const fallbackColors = ["#6366f1","#8b5cf6","#ec4899","#14b8a6","#f59e0b","#64748b","#0ea5e9","#84cc16","#e11d48","#a855f7"];
+            const evColor = (ev,i) => EV_COLOR[ev] || fallbackColors[i % fallbackColors.length];
+
+            // Build operator-specific data from timeline when selected
             let evData = eventosMes;
+            let activeEvTypes = evTypesSorted;
+            let mentoriaMonth = null; // MM/YYYY of mentoria for reference line
+
             if (selectedOp && selectedOp.timeline?.length) {
               const byMonth = {};
               const opEvTypes = new Set();
               selectedOp.timeline.forEach(ev => {
+                if (ev.ev === "n") return; // skip mentoria marker
                 const dp = ev.data?.match(/(\d{2})\/(\d{2})\/(\d{4})/);
                 if (!dp) return;
-                const mes = dp[2]+"/"+dp[3]; // MM/YYYY
+                const mes = dp[2]+"/"+dp[3];
                 if (!byMonth[mes]) byMonth[mes] = { mes, _sort: dp[3]+"-"+dp[2] };
                 byMonth[mes][ev.ev] = (byMonth[mes][ev.ev]||0) + 1;
                 opEvTypes.add(ev.ev);
               });
+              activeEvTypes = [...opEvTypes].sort();
               evData = Object.values(byMonth)
                 .sort((a,b) => a._sort.localeCompare(b._sort))
                 .map(m => {
                   let total = 0;
-                  opEvTypes.forEach(t => { total += (m[t]||0); });
+                  activeEvTypes.forEach(t => { total += (m[t]||0); });
                   return { ...m, total };
                 });
+              // Find mentoria month
+              if (selectedOp.dataMentoria && selectedOp.dataMentoria !== "–") {
+                const mp = selectedOp.dataMentoria.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+                if (mp) mentoriaMonth = mp[2]+"/"+mp[3];
+              }
             }
-            // Palette for EV types not in EV_COLOR
-            const fallbackColors = ["#6366f1","#8b5cf6","#ec4899","#14b8a6","#f59e0b","#64748b","#0ea5e9","#84cc16","#e11d48","#a855f7"];
-            const evColor = (ev,i) => EV_COLOR[ev] || fallbackColors[i % fallbackColors.length];
-            // Custom tooltip showing all EV types
+
+            // Build "Antes vs Depois" data for selected operator
+            let antesDepoisData = null;
+            if (selectedOp && selectedOp.timeline?.length && selectedOp.dataMentoria && selectedOp.dataMentoria !== "–") {
+              const mp = selectedOp.dataMentoria.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+              if (mp) {
+                const mentDate = new Date(+mp[3], +mp[2]-1, +mp[1]);
+                const antes = {}, depois = {};
+                const antesTypes = new Set(), depoisTypes = new Set();
+                let antesTotal = 0, depoisTotal = 0;
+                let antesMonths = new Set(), depoisMonths = new Set();
+                selectedOp.timeline.forEach(ev => {
+                  if (ev.ev === "n") return;
+                  const dp = ev.data?.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+                  if (!dp) return;
+                  const evDate = new Date(+dp[3], +dp[2]-1, +dp[1]);
+                  if (evDate < mentDate) {
+                    antes[ev.ev] = (antes[ev.ev]||0) + 1;
+                    antesTypes.add(ev.ev);
+                    antesTotal++;
+                    antesMonths.add(dp[2]+"/"+dp[3]);
+                  } else {
+                    depois[ev.ev] = (depois[ev.ev]||0) + 1;
+                    depoisTypes.add(ev.ev);
+                    depoisTotal++;
+                    depoisMonths.add(dp[2]+"/"+dp[3]);
+                  }
+                });
+                const allTypes = [...new Set([...antesTypes, ...depoisTypes])].sort();
+                antesDepoisData = {
+                  allTypes,
+                  bars: [
+                    { periodo: "Antes", ...antes, total: antesTotal, meses: antesMonths.size, media: antesMonths.size ? Math.round(antesTotal/antesMonths.size*10)/10 : 0 },
+                    { periodo: "Depois", ...depois, total: depoisTotal, meses: depoisMonths.size, media: depoisMonths.size ? Math.round(depoisTotal/depoisMonths.size*10)/10 : 0 },
+                  ],
+                };
+              }
+            }
+
+            // Custom tooltip showing all EV types with counts
             const EvTooltip = ({ active, payload, label }) => {
               if (!active || !payload?.length) return null;
               const row = payload[0]?.payload || {};
+              const types = selectedOp ? activeEvTypes : evTypesSorted;
               return (
-                <div className="ctt" style={{minWidth:140}}>
+                <div className="ctt" style={{minWidth:160}}>
                   <div className="lb" style={{marginBottom:6,fontWeight:700}}>{label}</div>
-                  {evTypesSorted.filter(ev => (row[ev]||0) > 0).map((ev,i) => (
+                  {types.filter(ev => (row[ev]||0) > 0).map((ev,i) => (
                     <div className="rw2" key={ev} style={{display:"flex",alignItems:"center",gap:6,fontSize:12,padding:"1px 0"}}>
                       <span style={{fontFamily:"monospace",fontWeight:700,color:evColor(ev,i),background:`${evColor(ev,i)}18`,padding:"1px 5px",borderRadius:3,fontSize:11}}>{ev}</span>
                       <span style={{color:C.muted,flex:1}}>{EV_LABELS[ev]||ev}</span>
@@ -1101,6 +1152,32 @@ const DashboardPage = ({ data, isReal, onNav, agenda, tratativas, sessions, onVe
                 </div>
               );
             };
+
+            // Antes vs Depois tooltip
+            const ADTooltip = ({ active, payload, label }) => {
+              if (!active || !payload?.length) return null;
+              const row = payload[0]?.payload || {};
+              const types = antesDepoisData?.allTypes || [];
+              return (
+                <div className="ctt" style={{minWidth:160}}>
+                  <div className="lb" style={{marginBottom:6,fontWeight:700}}>{label} da mentoria</div>
+                  {types.filter(ev => (row[ev]||0) > 0).map((ev,i) => (
+                    <div className="rw2" key={ev} style={{display:"flex",alignItems:"center",gap:6,fontSize:12,padding:"1px 0"}}>
+                      <span style={{fontFamily:"monospace",fontWeight:700,color:evColor(ev,i),background:`${evColor(ev,i)}18`,padding:"1px 5px",borderRadius:3,fontSize:11}}>{ev}</span>
+                      <span style={{color:C.muted,flex:1}}>{EV_LABELS[ev]||ev}</span>
+                      <strong style={{color:evColor(ev,i)}}>{row[ev]}</strong>
+                    </div>
+                  ))}
+                  <div style={{borderTop:`1px solid ${C.border}`,marginTop:4,paddingTop:4,fontSize:11,color:C.muted}}>
+                    {row.meses} mes(es) · Média: {row.media} ev/mês
+                  </div>
+                  <div style={{fontWeight:700,fontSize:12,textAlign:"right"}}>Total: {row.total||0}</div>
+                </div>
+              );
+            };
+
+            const chartTypes = selectedOp ? activeEvTypes : evTypesSorted;
+
             return chartTab==="eventos" ? (
               <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={evData} barSize={evData.length>12?7:9}>
@@ -1108,33 +1185,31 @@ const DashboardPage = ({ data, isReal, onNav, agenda, tratativas, sessions, onVe
                   <XAxis dataKey="mes" tick={{ fill:C.muted,fontSize:10 }} axisLine={false} tickLine={false} interval={evData.length>12?1:0} angle={evData.length>12?-45:0} textAnchor={evData.length>12?"end":"middle"} height={evData.length>12?50:30}/>
                   <YAxis tick={{ fill:C.muted,fontSize:11 }} axisLine={false} tickLine={false}/>
                   <Tooltip content={<EvTooltip/>}/>
-                  {evTypesSorted.map((ev,i) => (
+                  {chartTypes.map((ev,i) => (
                     <Bar key={ev} dataKey={ev} fill={evColor(ev,i)} radius={[2,2,0,0]} name={EV_LABELS[ev]||ev} stackId="ev"/>
                   ))}
                   <Line type="monotone" dataKey="total" stroke={C.accent} strokeWidth={2} strokeDasharray="5 3" dot={false} name="Total"/>
+                  {mentoriaMonth && <ReferenceLine x={mentoriaMonth} stroke={C.green} strokeWidth={2} strokeDasharray="6 3" label={{value:"Mentoria",fill:C.green,fontSize:10,position:"top"}}/>}
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <ResponsiveContainer width="100%" height={260}>
-                <AreaChart data={evData}>
-                  <defs>
-                    {evTypesSorted.map((ev,i) => (
-                      <linearGradient key={ev} id={`gEv${ev}`} x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={evColor(ev,i)} stopOpacity={.3}/>
-                        <stop offset="95%" stopColor={evColor(ev,i)} stopOpacity={0}/>
-                      </linearGradient>
+              selectedOp && antesDepoisData ? (
+                <ResponsiveContainer width="100%" height={260}>
+                  <BarChart data={antesDepoisData.bars} barSize={40}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false}/>
+                    <XAxis dataKey="periodo" tick={{ fill:C.muted,fontSize:12,fontWeight:700 }} axisLine={false} tickLine={false}/>
+                    <YAxis tick={{ fill:C.muted,fontSize:11 }} axisLine={false} tickLine={false}/>
+                    <Tooltip content={<ADTooltip/>}/>
+                    {antesDepoisData.allTypes.map((ev,i) => (
+                      <Bar key={ev} dataKey={ev} fill={evColor(ev,i)} radius={[2,2,0,0]} name={EV_LABELS[ev]||ev} stackId="ad"/>
                     ))}
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false}/>
-                  <XAxis dataKey="mes" tick={{ fill:C.muted,fontSize:10 }} axisLine={false} tickLine={false} interval={evData.length>12?1:0} angle={evData.length>12?-45:0} textAnchor={evData.length>12?"end":"middle"} height={evData.length>12?50:30}/>
-                  <YAxis tick={{ fill:C.muted,fontSize:11 }} axisLine={false} tickLine={false}/>
-                  <Tooltip content={<EvTooltip/>}/>
-                  {evTypesSorted.map((ev,i) => (
-                    <Area key={ev} dataKey={ev} fill={`url(#gEv${ev})`} stroke={evColor(ev,i)} strokeWidth={2} name={EV_LABELS[ev]||ev}/>
-                  ))}
-                  <Line type="monotone" dataKey="total" stroke={C.accent} strokeWidth={2} strokeDasharray="5 3" dot={false} name="Total"/>
-                </AreaChart>
-              </ResponsiveContainer>
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:260,color:C.muted,fontSize:13}}>
+                  {selectedOp ? "Operador sem data de mentoria para comparar Antes vs Depois" : "Clique em um operador na tabela abaixo para ver Antes vs Depois da mentoria"}
+                </div>
+              )
             );
           })()}
         </div>
@@ -1228,8 +1303,7 @@ const DashboardPage = ({ data, isReal, onNav, agenda, tratativas, sessions, onVe
                       onClick={()=>setSelectedOp(selectedOp?.re===op.re?null:op)}>
                       <td style={{ color:C.muted,fontWeight:600 }}>{i+1}</td>
                       <td><span className="re-tag">{fmtRE(op.re)}</span></td>
-                      <td style={{ fontWeight:500,fontSize:12,color:C.accent,cursor:"pointer" }}
-                        onClick={(e)=>{e.stopPropagation();onVerFicha(op);}}>{op.nome}</td>
+                      <td style={{ fontWeight:500,fontSize:12,color:C.accent,cursor:"pointer" }}>{op.nome}</td>
                       <td style={{ color:op.faltas>=10?C.red:op.faltas>=5?C.orange:C.muted,fontWeight:700 }}>{op.faltas}</td>
                       <td style={{ color:C.muted,fontWeight:700 }}>{op.atestados||0}</td>
                       <td style={{ color:op.multas>=5?C.red:op.multas>=3?C.orange:C.muted,fontWeight:700 }}>{op.multas}</td>
