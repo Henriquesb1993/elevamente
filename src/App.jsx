@@ -3490,7 +3490,7 @@ const TRAT_ST_MAP = {
 };
 
 // ─── TRATATIVAS PAGE ──────────────────────────────────────────────────────────
-const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions, onVerFicha }) => {
+const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions, onVerFicha, onDeleteSession }) => {
   const [tab, setTab]         = useState("kanban"); // kanban | lista
   const [filtArea, setFiltArea] = useState("todas");
   const [filtStatus, setFiltStatus] = useState("todos");
@@ -3571,7 +3571,10 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions, onVe
   };
 
   const handleDelete = (id) => {
-    if(!confirm("Tem certeza que deseja excluir esta tratativa?")) return;
+    if(!confirm("Tem certeza que deseja excluir esta tratativa e a sessão de mentoria vinculada?")) return;
+    const trat = tratativas.find(t=>t.id===id);
+    // Remove sessão de mentoria vinculada
+    if(trat?.sessionId && onDeleteSession) onDeleteSession(trat.sessionId);
     onUpdate(tratativas.filter(t => t.id !== id));
     toast("Tratativa excluída!", "info");
     if(detalhes?.id===id) setDetalhes(null);
@@ -6144,7 +6147,9 @@ export default function App() {
           {active==="mentoria"    && <MentoriaPage operators={ops} sessions={sessions}
   onDelete={id=>{
     setSess(prev=>prev.filter(s=>s.id!==id));
-    audit("Sessão de mentoria apagada (id:"+id+")", "Apagou");
+    // Remove tratativas vinculadas a esta sessão
+    setTrat(prev=>prev.filter(t=>t.sessionId!==id));
+    audit("Sessão de mentoria apagada (id:"+id+") + tratativas vinculadas", "Apagou");
   }}
   onUpdate={updated=>{
     setSess(prev=>prev.map(s=>s.id===updated.id?{...s,...updated}:s));
@@ -6166,7 +6171,7 @@ export default function App() {
   }
 }}/>}
           {active==="agenda"      && <AgendaPage agenda={filteredAgenda} onUpdate={setAgd} onAdd={a=>setAgd(prev=>[...prev,a])} operators={ops}/>}
-          {active==="tratativas"  && <TratativasPage tratativas={filteredTrat} onUpdate={setTrat} onAdd={t=>{setTrat(prev=>[...prev,t]);audit("Nova tratativa: "+t.area+" - "+t.re, "Criou");}} operators={ops} sessions={sessions} onVerFicha={(op)=>{setSelectedOp(op);setPrevActive("tratativas");setActive("ficha");}}/>}
+          {active==="tratativas"  && <TratativasPage tratativas={filteredTrat} onUpdate={setTrat} onAdd={t=>{setTrat(prev=>[...prev,t]);audit("Nova tratativa: "+t.area+" - "+t.re, "Criou");}} operators={ops} sessions={sessions} onVerFicha={(op)=>{setSelectedOp(op);setPrevActive("tratativas");setActive("ficha");}} onDeleteSession={id=>{setSess(prev=>prev.filter(s=>s.id!==id));audit("Sessão removida via tratativa (id:"+id+")","Apagou");}}/>}
           {active==="relatorios"  && <RelatoriosPage data={filteredOps} sessions={sessions} tratativas={filteredTrat} custos={custos}/>}
           {active==="auditoria"   && <AuditoriaPage auditLogs={auditLogs} user={user}/>}
           {active==="parametros"  && <ParametrosPage custos={custos} onSave={setCust}/>}
