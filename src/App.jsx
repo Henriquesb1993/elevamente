@@ -1078,15 +1078,19 @@ const DashboardPage = ({ data, isReal, onNav, agenda, tratativas, sessions, onVe
             let activeEvTypes = evTypesSorted;
             let mentoriaMonth = null;
 
-            if (selectedOp && selectedOp.timeline?.length) {
+            if (selectedOp) {
               const byMonth = {};
               const opEvTypes = new Set();
-              selectedOp.timeline.forEach(ev => {
+              // Start with all months from global data (so empty months show as 0)
+              eventosMes.forEach(m => {
+                byMonth[m.mes] = { mes: m.mes, _sort: m.mes.split("/").reverse().join("-"), total: 0 };
+              });
+              (selectedOp.timeline||[]).forEach(ev => {
                 if (ev.ev === "n") return;
                 const dp = parseDate(ev.data);
                 if (!dp) return;
                 const mes = dp.mmyyyy;
-                if (!byMonth[mes]) byMonth[mes] = { mes, _sort: String(dp.y)+"-"+String(dp.m).padStart(2,"0") };
+                if (!byMonth[mes]) byMonth[mes] = { mes, _sort: String(dp.y)+"-"+String(dp.m).padStart(2,"0"), total: 0 };
                 byMonth[mes][ev.ev] = (byMonth[mes][ev.ev]||0) + 1;
                 opEvTypes.add(ev.ev);
               });
