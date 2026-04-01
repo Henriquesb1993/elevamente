@@ -487,7 +487,14 @@ function processExcel(workbook) {
   console.log("[Elevamente] Quadro rows:", quadro.length);
   console.log("[Elevamente] Presenca rows:", presenca.length);
   console.log("[Elevamente] Formulario rows:", formulario.length);
-  console.log("[Elevamente] Operators sample:", operators.slice(0,3).map(o=>({re:o.re,nome:o.nome,timeline:o.timeline?.length,faltas:o.faltas,multas:o.multas})));
+  // Log mentoria detection
+  const opsComN = operators.filter(o=>o.resultado==="melhora"||o.resultado==="piora");
+  console.log("[Elevamente] Operators com EV=n (mentorados):", opsComN.length, opsComN.slice(0,3).map(o=>({re:o.re,nome:o.nome,resultado:o.resultado,evPosCount:o.evPosCount,dataMentoria:o.dataMentoria})));
+  console.log("[Elevamente] Todos os EV types encontrados:", evTypesSorted);
+  console.log("[Elevamente] KPIs:", { total, emMentoria, melhoraram, pioraram, aguardando, taxaMelhora });
+  // Sample operator with timeline
+  const sampleOp = operators.find(o=>o.timeline?.length>0);
+  if(sampleOp) console.log("[Elevamente] Sample operator timeline:", {re:sampleOp.re, nome:sampleOp.nome, tlLength:sampleOp.timeline.length, first3:sampleOp.timeline.slice(0,3), dataMentoria:sampleOp.dataMentoria, resultado:sampleOp.resultado});
 
   return { operators, kpis:{ total, emMentoria, melhoraram, pioraram, aguardando, taxaMelhora },
            eventosMes, evTypesSorted, causas, sheetSummary };
