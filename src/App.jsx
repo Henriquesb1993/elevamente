@@ -1553,13 +1553,15 @@ const OperadoresPage = ({ operators, onVerFicha }) => {
 
   const garagens = [...new Set(operators.map(o=>o.garagem).filter(Boolean))].sort();
 
+  // Filter by garagem first, then tabs count from filtered list
+  const filteredByGaragem = garagem==="todas" ? operators : operators.filter(o=>o.garagem===garagem);
+
   const tabs = [
-    { id:"todos",      label:"Todos",        count:operators.length },
-    { id:"mentoria",   label:"Qtd mentorado",  count:operators.filter(o=>o.status==="mentoria").length },
-    { id:"melhora",    label:"Melhoraram",   count:operators.filter(o=>o.resultado==="melhora").length },
-    { id:"piora",      label:"Pioraram",     count:operators.filter(o=>o.resultado==="piora").length },
-    { id:"andamento",  label:"Avaliação",    count:operators.filter(o=>o.resultado==="andamento").length },
-    { id:"aguardando", label:"Aguardando",   count:operators.filter(o=>o.status==="aguardando").length },
+    { id:"todos",      label:"Todos",          count:filteredByGaragem.length },
+    { id:"mentoria",   label:"Qtd mentorado",  count:filteredByGaragem.filter(o=>o.status==="mentoria").length },
+    { id:"melhora",    label:"Melhoraram",      count:filteredByGaragem.filter(o=>o.resultado==="melhora").length },
+    { id:"piora",      label:"Pioraram",        count:filteredByGaragem.filter(o=>o.resultado==="piora").length },
+    { id:"aguardando", label:"Aguardando",      count:filteredByGaragem.filter(o=>o.status==="aguardando").length },
   ];
 
   // Autocomplete suggestions (max 5)
@@ -1567,15 +1569,44 @@ const OperadoresPage = ({ operators, onVerFicha }) => {
     op.nome.toLowerCase().includes(busca.toLowerCase()) || op.re.toLowerCase().includes(busca.toLowerCase())
   ).slice(0,5) : [];
 
-  const lista = operators.filter(op => {
+  const lista = filteredByGaragem.filter(op => {
     const bOk = !busca || op.nome.toLowerCase().includes(busca.toLowerCase()) || op.re.toLowerCase().includes(busca.toLowerCase());
-    const gOk = garagem==="todas" || op.garagem===garagem;
     const tOk = tab==="todos" ? true
                : tab==="mentoria"   ? op.status==="mentoria"
                : tab==="aguardando" ? op.status==="aguardando"
                : op.resultado===tab;
-    return bOk && gOk && tOk;
+    return bOk && tOk;
   });
+
+  // Export Excel
+  const handleExport = async () => {
+    try {
+      const xlsxLib = await loadXLSX();
+      const rows = lista.map(op => ({
+        "RE": op.re,
+        "Nome": op.nome,
+        "Função": op.funcao,
+        "Garagem": op.garagem,
+        "Admissão": op.admissao,
+        "Faltas": op.faltas||0,
+        "Multas": op.multas||0,
+        "Atestados": op.atestados||0,
+        "Suspensões": op.suspensoes||0,
+        "Acidentes": op.acidentes||0,
+        "Status": op.status,
+        "Resultado": op.resultado||"—",
+        "Data Mentoria": op.dataMentoria||"—",
+      }));
+      const ws = xlsxLib.utils.json_to_sheet(rows);
+      const wb = xlsxLib.utils.book_new();
+      xlsxLib.utils.book_append_sheet(wb, ws, "Operadores");
+      // Auto column widths
+      ws["!cols"] = Object.keys(rows[0]||{}).map(k => ({ wch: Math.max(k.length, 12) }));
+      const filtro = garagem!=="todas" ? `_${garagem}` : "";
+      const tabNome = tab!=="todos" ? `_${tab}` : "";
+      xlsxLib.writeFile(wb, `operadores${filtro}${tabNome}.xlsx`);
+    } catch(e) { console.error("Erro ao exportar:", e); }
+  };
 
   return (
     <div className="fu d1">
@@ -1613,7 +1644,7 @@ const OperadoresPage = ({ operators, onVerFicha }) => {
           <option value="todas">Todas as Garagens</option>
           {garagens.map(g=><option key={g} value={g}>{g}</option>)}
         </select>
-        <button className="abt" style={{ padding:"10px 16px" }}>⬇ Exportar</button>
+        <button className="abt" style={{ padding:"10px 16px" }} onClick={handleExport}>⬇ Exportar</button>
       </div>
       <div className="op-tabs">
         {tabs.map(t=>(
