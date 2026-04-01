@@ -3136,10 +3136,9 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions, onVe
   const handleRetornoSave = () => {
     if(!retornoText.trim()){toast("Preencha o retorno antes de salvar!","error");return;}
     const currentStatus = modalStatus || detalhes.status;
-    // Only allow conclude if currently "andamento"
-    const newStatus = currentStatus==="andamento" ? "concluido" : currentStatus;
-    onUpdate(tratativas.map(t => t.id===detalhes.id ? {...t, retorno:retornoText, status:newStatus} : t));
-    toast(newStatus==="concluido"?`Tratativa de ${detalhes.area} concluida!`:`Retorno salvo para ${detalhes.area}!`, "success");
+    // Salva retorno SEM mudar status automaticamente
+    onUpdate(tratativas.map(t => t.id===detalhes.id ? {...t, retorno:retornoText} : t));
+    toast(`Retorno salvo para ${detalhes.area}!`, "success");
     setDetalhes(null);
     setRetornoText("");
   };
@@ -4419,22 +4418,16 @@ const AGENDA_INIT = [];
 
 const TIPO_COLORS = {
   "Mentoria inicial":   { color:"#00D4FF", bg:"#00D4FF18", icon:"🎯" },
-  "Acompanhamento":     { color:"#10B981", bg:"#10B98118", icon:"📋" },
-  "Retorno psicologo":  { color:"#8B5CF6", bg:"#8B5CF618", icon:"🧠" },
-  "Retorno ambulatorio":{ color:"#10B981", bg:"#10B98118", icon:"🏥" },
-  "Retorno juridico":   { color:"#F97316", bg:"#F9731618", icon:"⚖️" },
-  "Retorno RH":         { color:"#0091FF", bg:"#0091FF18", icon:"👔" },
+  "Retorno da mentoria":{ color:"#10B981", bg:"#10B98118", icon:"📋" },
 };
 const STATUS_AGENDA = {
-  confirmado: { label:"Confirmado", color:"#10B981", bg:"#10B98118" },
-  pendente:   { label:"Pendente",   color:"#F59E0B", bg:"#F59E0B18" },
   agendado:   { label:"Agendado",   color:"#00D4FF", bg:"#00D4FF18" },
-  realizado:  { label:"Realizado",  color:"#64748B", bg:"#64748B18" },
+  realizado:  { label:"Compareceu", color:"#10B981", bg:"#10B98118" },
   faltou:     { label:"Faltou",     color:"#EF4444", bg:"#EF444418" },
 };
 
 // ─── AGENDA PAGE ──────────────────────────────────────────────────────────────
-const LOCAIS_PADRAO = ["Garagem 1","Garagem 3","Garagem 4","Sala RH","Psicologia","Ambulatorio","Juridico","Online"];
+const LOCAIS_PADRAO = ["Garagem 1","Garagem 3","Garagem 4"];
 const DIAS_SEMANA = ["Todos","Dom","Seg","Ter","Qua","Qui","Sex","Sab"];
 
 const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
@@ -4448,11 +4441,16 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
   const [filtTipo, setFiltTipo]   = useState("todos");
   const [filtDia, setFiltDia]     = useState("Todos");
   const [weekOffset, setWeekOffset] = useState(0);
-  const [form, setForm] = useState({ re:"", nome:"", tipo:"Mentoria inicial", hora:"09:00", data:fmtDate(hoje), durMin:60, status:"agendado", obs:"", local:"Garagem 1" });
+  const [form, setForm] = useState({ re:"", nome:"", tipo:"Mentoria inicial", hora:"09:00", data:fmtDate(hoje), status:"agendado", obs:"", local:"Garagem 1" });
+  const [reSearch, setReSearch] = useState("");
+  const [reDropOpen, setReDropOpen] = useState(false);
+  const [faltouId, setFaltouId] = useState(null);
+  const [faltouMotivo, setFaltouMotivo] = useState("");
+  const [filtRe, setFiltRe] = useState("");
 
   const upd = (k,v) => setForm(f=>({...f,[k]:v}));
 
-  const openNew = () => { setEditItem(null); setForm({ re:"", nome:"", tipo:"Mentoria inicial", hora:"09:00", data:fmtDate(hoje), durMin:60, status:"agendado", obs:"", local:"Garagem 1" }); setShowModal(true); };
+  const openNew = () => { setEditItem(null); setForm({ re:"", nome:"", tipo:"Mentoria inicial", hora:"09:00", data:fmtDate(hoje), status:"agendado", obs:"", local:"Garagem 1" }); setReSearch(""); setShowModal(true); };
   const openEdit = (item) => { setEditItem(item); setForm({...item}); setShowModal(true); };
 
   const exportExcel = async () => {
@@ -4500,7 +4498,16 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
     setShowModal(false);
   };
 
-  const handleStatus = (id, st) => onUpdate(agenda.map(a=>a.id===id?{...a,status:st}:a));
+  const handleStatus = (id, st) => {
+    if(st==="faltou"){ setFaltouId(id); setFaltouMotivo(""); return; }
+    onUpdate(agenda.map(a=>a.id===id?{...a,status:st}:a));
+  };
+  const confirmFaltou = () => {
+    if(!faltouMotivo.trim()){toast("Informe o motivo da falta!","error");return;}
+    onUpdate(agenda.map(a=>a.id===faltouId?{...a,status:"faltou",obs:(a.obs?a.obs+" | ":"")+"Motivo falta: "+faltouMotivo}:a));
+    setFaltouId(null); setFaltouMotivo("");
+    toast("Falta registrada.","info");
+  };
   const handleDelete = (id) => onUpdate(agenda.filter(a=>a.id!==id));
 
   // Parse date string to JS Date
@@ -4514,7 +4521,8 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
   const filtered = agenda.filter(a=>{
     const sOk = filtStatus==="todos" || a.status===filtStatus;
     const tOk = filtTipo==="todos"   || a.tipo===filtTipo;
-    if(!sOk || !tOk) return false;
+    const rOk = !filtRe || a.re.toLowerCase().includes(filtRe.toLowerCase()) || (a.nome||"").toLowerCase().includes(filtRe.toLowerCase());
+    if(!sOk || !tOk || !rOk) return false;
     if(filtDia!=="Todos"){
       const d=parseAgendaDate(a.data);
       if(!d) return false;
@@ -4579,21 +4587,20 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
             <div style={{display:"flex",alignItems:"center",gap:8,marginTop:3,flexWrap:"wrap"}}>
               <span style={{fontSize:11,color:tp.color,background:tp.bg,padding:"2px 8px",borderRadius:5,fontWeight:600}}>{tp.icon} {a.tipo}</span>
               {a.local && <span style={{fontSize:11,color:C.muted}}>📍 {a.local}</span>}
-              <span style={{fontSize:11,color:C.muted}}>⏱ {a.durMin}min</span>
             </div>
             {a.obs && <div style={{fontSize:11,color:C.muted,marginTop:3,fontStyle:"italic"}}>{a.obs}</div>}
           </div>
           {/* Status + acoes */}
           <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
             <span className="pill" style={{color:st.color,background:st.bg,fontSize:10}}>● {st.label}</span>
-            {!compact && (
-              <div style={{display:"flex",gap:4}}>
-                {a.status!=="realizado" && <button onClick={e=>{e.stopPropagation();handleStatus(a.id,"realizado");}}
-                  style={{padding:"3px 8px",borderRadius:6,border:`1px solid ${C.green}`,background:`${C.green}15`,color:C.green,fontSize:10,cursor:"pointer",fontWeight:600}}>✓</button>}
-                {a.status!=="faltou" && <button onClick={e=>{e.stopPropagation();handleStatus(a.id,"faltou");}}
-                  style={{padding:"3px 8px",borderRadius:6,border:`1px solid ${C.red}`,background:`${C.red}15`,color:C.red,fontSize:10,cursor:"pointer",fontWeight:600}}>✗</button>}
-              </div>
-            )}
+            <div style={{display:"flex",gap:4}}>
+              {a.status!=="realizado" && <button onClick={e=>{e.stopPropagation();handleStatus(a.id,"realizado");}} title="Compareceu"
+                style={{padding:"3px 8px",borderRadius:6,border:`1px solid ${C.green}`,background:`${C.green}15`,color:C.green,fontSize:10,cursor:"pointer",fontWeight:600}}>✓</button>}
+              {a.status!=="faltou" && <button onClick={e=>{e.stopPropagation();handleStatus(a.id,"faltou");}} title="Faltou"
+                style={{padding:"3px 8px",borderRadius:6,border:`1px solid ${C.red}`,background:`${C.red}15`,color:C.red,fontSize:10,cursor:"pointer",fontWeight:600}}>F</button>}
+              <button onClick={e=>{e.stopPropagation();if(window.confirm("Apagar este agendamento?"))handleDelete(a.id);}} title="Apagar"
+                style={{padding:"3px 8px",borderRadius:6,border:`1px solid ${C.muted}`,background:`${C.muted}15`,color:C.muted,fontSize:10,cursor:"pointer",fontWeight:600}}>✕</button>
+            </div>
           </div>
         </div>
       </div>
@@ -4602,6 +4609,24 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
 
   return (
     <div className="fu d1">
+      {/* ── Modal motivo falta ── */}
+      {faltouId&&(
+        <div style={{position:"fixed",inset:0,background:"#000c",zIndex:250,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}
+          onClick={()=>setFaltouId(null)}>
+          <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:16,padding:24,width:"100%",maxWidth:400}}
+            onClick={e=>e.stopPropagation()}>
+            <div style={{fontFamily:"'Inter',sans-serif",fontSize:16,fontWeight:700,marginBottom:12,color:C.red}}>⚠️ Registrar Falta</div>
+            <div style={{fontSize:12,color:C.muted,marginBottom:12}}>Informe o motivo da falta do operador:</div>
+            <textarea style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,
+              fontFamily:"'Inter',sans-serif",width:"100%",outline:"none",resize:"vertical",minHeight:60,marginBottom:12}}
+              placeholder="Motivo da falta..." value={faltouMotivo} onChange={e=>setFaltouMotivo(e.target.value)} autoFocus/>
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={confirmFaltou} style={{flex:1,padding:"10px",background:C.red,color:"#fff",border:"none",borderRadius:8,fontWeight:700,cursor:"pointer",fontSize:13}}>Confirmar Falta</button>
+              <button onClick={()=>setFaltouId(null)} className="abt" style={{padding:"10px 16px"}}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* ── Modal agendar/editar ── */}
       {showModal && (
         <div style={{position:"fixed",inset:0,background:"#000c",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}
@@ -4612,37 +4637,44 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
               {editItem?"✏️ Editar Agendamento":"📅 Novo Agendamento"}
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}} className="form-grid-2">
-              <div style={{gridColumn:"1 / -1"}}>
-                <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Operador * (RE - Nome)</div>
-                <select style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none"}}
-                  value={form.re} onChange={e=>{const op=operators.find(o=>o.re===e.target.value);upd("re",e.target.value);if(op)upd("nome",op.nome);}}>
-                  <option value="">Selecione o operador...</option>
-                  {operators.map(o=><option key={o.re} value={o.re}>{o.re} - {o.nome} ({o.funcao})</option>)}
-                </select>
+              <div style={{gridColumn:"1 / -1",position:"relative"}}>
+                <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Operador * (digite RE ou nome)</div>
+                <input style={{background:C.bg,border:`1px solid ${form.re?C.accent:C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none"}}
+                  placeholder="Digite o RE ou nome para buscar..."
+                  value={reSearch||(form.re?`${fmtRE(form.re)} - ${form.nome}`:"")}
+                  onChange={e=>{setReSearch(e.target.value);setReDropOpen(true);upd("re","");upd("nome","");}}
+                  onFocus={()=>setReDropOpen(true)}/>
+                {reDropOpen&&reSearch&&(
+                  <div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:10,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,maxHeight:180,overflowY:"auto",marginTop:4}}>
+                    {operators.filter(o=>o.re.toLowerCase().includes(reSearch.toLowerCase())||o.nome.toLowerCase().includes(reSearch.toLowerCase())).slice(0,8).map(o=>(
+                      <div key={o.re} style={{padding:"8px 12px",cursor:"pointer",fontSize:12,borderBottom:`1px solid ${C.border}20`}}
+                        onMouseDown={()=>{upd("re",o.re);upd("nome",o.nome);setReSearch("");setReDropOpen(false);}}>
+                        <span style={{fontWeight:700,color:C.accent}}>{fmtRE(o.re)}</span> — {o.nome} ({o.funcao})
+                      </div>
+                    ))}
+                    {operators.filter(o=>o.re.toLowerCase().includes(reSearch.toLowerCase())||o.nome.toLowerCase().includes(reSearch.toLowerCase())).length===0&&
+                      <div style={{padding:"8px 12px",color:C.muted,fontSize:12}}>Nenhum operador encontrado</div>}
+                  </div>
+                )}
               </div>
               <div>
                 <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Tipo de encontro *</div>
                 <select style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none"}}
                   value={form.tipo} onChange={e=>upd("tipo",e.target.value)}>
-                  {["Mentoria inicial","Acompanhamento","Retorno psicologo","Retorno ambulatorio","Retorno juridico","Retorno RH"].map(t=><option key={t}>{t}</option>)}
+                  {["Mentoria inicial","Retorno da mentoria"].map(t=><option key={t}>{t}</option>)}
                 </select>
               </div>
               <div>
                 <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Data *</div>
                 <input style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none"}}
-                  placeholder="dd/mm/aa" value={form.data} onChange={e=>upd("data",e.target.value)}/>
+                  type="date" min={new Date().toISOString().split("T")[0]}
+                  value={(()=>{const p=(form.data||"").split("/");return p.length===3?`20${p[2]}-${p[1].padStart(2,"0")}-${p[0].padStart(2,"0")}`:form.data;})()}
+                  onChange={e=>{const d=e.target.value.split("-");if(d.length===3)upd("data",`${d[2]}/${d[1]}/${d[0].slice(-2)}`);}}/>
               </div>
               <div>
-                <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Horario *</div>
-                <input style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none"}}
+                <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Horário *</div>
+                <input style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none",colorScheme:C.text==="#1a1a2e"?"light":"dark"}}
                   type="time" value={form.hora} onChange={e=>upd("hora",e.target.value)}/>
-              </div>
-              <div>
-                <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Duracao (minutos)</div>
-                <select style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none"}}
-                  value={form.durMin} onChange={e=>upd("durMin",parseInt(e.target.value))}>
-                  {[30,45,60,90,120].map(d=><option key={d} value={d}>{d} min</option>)}
-                </select>
               </div>
               <div>
                 <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Local</div>
@@ -4652,17 +4684,7 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
                 </select>
               </div>
             </div>
-            <div style={{marginBottom:12}}>
-              <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Status</div>
-              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                {Object.entries(STATUS_AGENDA).map(([k,v])=>(
-                  <button key={k} onClick={()=>upd("status",k)} style={{padding:"6px 14px",borderRadius:8,border:`1px solid ${form.status===k?v.color:C.border}`,
-                    background:form.status===k?v.bg:"transparent",color:form.status===k?v.color:C.muted,fontSize:12,fontWeight:600,cursor:"pointer"}}>
-                    {v.label}
-                  </button>
-                ))}
-              </div>
-            </div>
+            {/* Status removido - sempre agendado ao criar */}
             <div style={{marginBottom:16}}>
               <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Observacao</div>
               <textarea style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,
@@ -4707,21 +4729,26 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
         </button>
       </div>
 
-      {/* ── KPIs ── */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:12,marginBottom:20}} className="men-kpi-grid">
+      {/* ── KPIs interativos ── */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:16}} className="men-kpi-grid">
         {[
-          {v:total,       l:"Total agendado",  c:C.accent},
-          {v:deHoje.length,l:"Hoje",           c:C.accent2},
-          {v:pendentes,   l:"Pendentes",       c:C.gold},
-          {v:realizados,  l:"Realizados",      c:C.green},
-          {v:faltaram,    l:"Faltaram",        c:C.red},
+          {v:total,        l:"Total Agendado",  c:C.accent,  f:"todos"},
+          {v:deHoje.length,l:"Hoje",            c:C.accent2, f:"hoje"},
+          {v:faltaram,     l:"Faltou",          c:C.red,     f:"faltou"},
+          {v:realizados,   l:"Compareceu",      c:C.green,   f:"realizado"},
         ].map(x=>(
-          <div key={x.l} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 16px",borderTop:`2px solid ${x.c}40`}}>
+          <div key={x.l} onClick={()=>setFiltStatus(filtStatus===x.f?"todos":x.f)}
+            style={{background:C.card,border:`1px solid ${filtStatus===x.f?x.c:C.border}`,borderRadius:12,padding:"14px 16px",
+              borderTop:`2px solid ${x.c}40`,cursor:"pointer",transition:"all .2s"}}>
             <div style={{fontFamily:"'Inter',sans-serif",fontSize:24,fontWeight:800,color:x.c}}>{x.v}</div>
             <div style={{fontSize:11,color:C.muted,marginTop:2}}>{x.l}</div>
           </div>
         ))}
       </div>
+      {/* ── Filtro por RE ── */}
+      <input style={{background:C.card,border:`1px solid ${C.border}`,color:C.text,padding:"10px 16px",borderRadius:10,fontSize:13,
+        fontFamily:"'Inter',sans-serif",width:"100%",outline:"none",marginBottom:16}}
+        placeholder="🔍  Filtrar por RE ou nome do operador..." value={filtRe} onChange={e=>setFiltRe(e.target.value)}/>
 
       {/* ── Filtros ── */}
       <div style={{display:"flex",gap:10,marginBottom:18,flexWrap:"wrap",alignItems:"center"}}>
@@ -5610,7 +5637,7 @@ export default function App() {
 
         {/* ── USER STATUS BAR (bottom) ── */}
         {user && (
-          <div style={{position:"fixed",bottom:0,left:col?64:240,right:0,zIndex:50,
+          <div className="mob-hide" style={{position:"fixed",bottom:0,left:col?64:240,right:0,zIndex:50,
             background:C.surface,borderTop:`1px solid ${C.border}`,
             padding:"5px 20px",display:"flex",alignItems:"center",gap:12,fontSize:12,
             transition:"left .3s"}}>
