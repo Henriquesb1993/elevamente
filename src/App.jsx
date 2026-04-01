@@ -3570,6 +3570,13 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions, onVe
     setNewForm({ re:"", nome:"", area:"RH", subarea:"", prazo:"", prioridade:"", descricao:"" });
   };
 
+  const handleDelete = (id) => {
+    if(!confirm("Tem certeza que deseja excluir esta tratativa?")) return;
+    onUpdate(tratativas.filter(t => t.id !== id));
+    toast("Tratativa excluída!", "info");
+    if(detalhes?.id===id) setDetalhes(null);
+  };
+
   const exportExcel = async () => {
     try {
       const xlsxLib = await loadXLSX();
@@ -3603,8 +3610,13 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions, onVe
             <div style={{fontWeight:600,fontSize:13,marginBottom:2}}>{t.descricao.length>55?t.descricao.slice(0,55)+"…":t.descricao}</div>
             <div style={{fontSize:11,color:C.muted}}><span className="re-tag" style={{fontSize:10,padding:"1px 5px"}}>{fmtRE(t.re)}</span> {t.nome}</div>
           </div>
-          <div style={{fontSize:10,fontWeight:700,color:ac,background:`${ac}18`,padding:"2px 8px",borderRadius:6,whiteSpace:"nowrap",flexShrink:0}}>
-            {t.area}
+          <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+            <div style={{fontSize:10,fontWeight:700,color:ac,background:`${ac}18`,padding:"2px 8px",borderRadius:6,whiteSpace:"nowrap"}}>
+              {t.area}
+            </div>
+            <button onClick={e=>{e.stopPropagation();handleDelete(t.id);}}
+              style={{background:`${C.red}12`,border:`1px solid ${C.red}30`,borderRadius:6,padding:"2px 6px",fontSize:12,color:C.red,cursor:"pointer",lineHeight:1}}
+              title="Excluir tratativa">🗑</button>
           </div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
@@ -3639,6 +3651,7 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions, onVe
                 <div style={{fontFamily:"'Inter',sans-serif",fontSize:17,fontWeight:700}}>{detalhes.area}{detalhes.subarea?` → ${detalhes.subarea}`:""}</div>
                 <div style={{fontSize:12,color:C.muted}}>{detalhes.re} · {detalhes.nome}</div>
               </div>
+              <button onClick={()=>{handleDelete(detalhes.id);}} style={{background:`${C.red}15`,border:`1px solid ${C.red}30`,borderRadius:8,padding:"4px 10px",fontSize:11,color:C.red,cursor:"pointer",fontWeight:600}}>🗑 Excluir</button>
               <button onClick={()=>setDetalhes(null)} style={{background:"none",border:"none",color:C.muted,fontSize:20,cursor:"pointer"}}>✕</button>
             </div>
 
