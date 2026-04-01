@@ -582,7 +582,7 @@ tr:last-child td{border-bottom:none}
 @media(max-width:768px){
   .sidebar{width:0;overflow:hidden;border:none}
   .sidebar.mob-open{width:240px;box-shadow:4px 0 24px #000a}
-  .main{margin-left:0!important;padding:16px 14px}
+  .main{margin-left:0!important;padding:16px 14px 20px}
   .mob-overlay{display:block!important}
   .gkpi{grid-template-columns:repeat(2,1fr)!important;gap:10px}
   .g2{grid-template-columns:1fr!important}
@@ -608,8 +608,12 @@ tr:last-child td{border-bottom:none}
 @media(max-width:480px){
   .gkpi{grid-template-columns:1fr 1fr!important}
   .main{padding:12px 10px}
-  .ficha-grid{grid-template-columns:repeat(3,1fr)!important}
+  .ficha-grid{grid-template-columns:repeat(2,1fr)!important}
   .kv{font-size:22px!important}
+  .ficha-header{padding:16px 14px!important}
+  .card{padding:14px!important;border-radius:12px!important}
+  .rel-tabs{overflow-x:auto;flex-wrap:nowrap!important}
+  .rel-tabs button{white-space:nowrap;flex:0 0 auto!important;padding:8px 10px!important;font-size:11px!important}
 }
 /* Kanban mobile: stack columns vertically */
 @media(max-width:768px){
@@ -1886,10 +1890,10 @@ async function gerarPDFRelatorio(data, sessions, tratativas, custos) {
 
   doc.autoTable({ startY:y, head:[["Indicador","Valor","Indicador","Valor"]],
     body:[
-      ["Total Operadores",total,"Em Mentoria",emM],
-      ["Melhoraram",melh,"Pioraram",pior],
-      ["Taxa de Melhora",taxa+"%","Total Sessoes",sessions.length],
-      ["Perda Total Estimada",fmtBRL(perdaTotal),"Total Tratativas",tratativas.length],
+      ["Total Operadores",total,"Melhoraram",melh],
+      ["Pioraram",pior,"Taxa de Melhora",taxa+"%"],
+      ["Total Sessoes Mentoria",sessions.length,"Total Tratativas",tratativas.length],
+      ["Perda Total Estimada",fmtBRL(perdaTotal),"",""],
     ], theme:"grid", headStyles:{fillColor:[0,60,120],textColor:255,fontSize:9},
     bodyStyles:{fontSize:10,fontStyle:"bold"}, margin:{left:14,right:14}, tableWidth:W-28 });
   y=doc.lastAutoTable.finalY+8;
@@ -1897,7 +1901,7 @@ async function gerarPDFRelatorio(data, sessions, tratativas, custos) {
   // Ranking
   doc.addPage(); y=14;
   doc.setFontSize(12); doc.setFont(undefined,"bold"); doc.setTextColor(0,60,120);
-  doc.text("■ Ranking de Operadores por Risco", 14, y); y+=7;
+  doc.text("RANKING DE OPERADORES POR RISCO", 14, y); y+=7;
   const ranking=[...ops].map(op=>{const score=(op.faltas||0)*3+(op.multas||0)*2+(op.suspensoes||0)*5+(op.acidentes||0)*4;return{...op,score};}).sort((a,b)=>b.score-a.score).slice(0,15);
   doc.autoTable({ startY:y, head:[["#","RE","Nome","Garagem","Funcao","Faltas","Multas","Susp","Acid","Score","Status","Perda Est. (R$)"]],
     body:ranking.map((op,i)=>{const f=op.faltas||0,at=op.atestados||0,vd=getValorDia(op.funcao,custos),dsr=Math.round(f*0.70),fp=f<=5?0:f<=14?6:f<=23?12:f<=32?18:30;const perda=f*vd+dsr*vd+fp*vd+fp*(vd/3)+at*(custos.valorVR||0)+(op.multasValor||0);return[i+1,op.re,op.nome,op.garagem,op.funcao,op.faltas||0,op.multas||0,op.suspensoes||0,op.acidentes||0,op.score,op.status,fmtBRL(perda)];}),
@@ -1908,7 +1912,7 @@ async function gerarPDFRelatorio(data, sessions, tratativas, custos) {
   // Tratativas por setor
   doc.addPage(); y=14;
   doc.setFontSize(13); doc.setFont(undefined,"bold"); doc.setTextColor(0,60,120);
-  doc.text("■ TRATATIVAS - Resumo por Setor", 14, y); y+=9;
+  doc.text("TRATATIVAS - RESUMO POR SETOR", 14, y); y+=9;
 
   // Resumo por area
   const setoresStats = Object.values(
@@ -1949,7 +1953,7 @@ async function gerarPDFRelatorio(data, sessions, tratativas, custos) {
   // Tabela detalhada
   checkPage(30);
   doc.setFontSize(11); doc.setFont(undefined,"bold"); doc.setTextColor(0,60,120);
-  doc.text("■ TRATATIVAS - Detalhamento Completo", 14, y); y+=7;
+  doc.text("TRATATIVAS - DETALHAMENTO COMPLETO", 14, y); y+=7;
   doc.autoTable({
     startY:y,
     head:[["RE","Nome","Area","Subarea","Data","Prazo","Prioridade","Status","Retorno"]],
@@ -3987,9 +3991,9 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
 
       {/* ══ CAUSAS ══ */}
       {tab==="causas"&&(
-        <div className="g2">
+        <><div className="g2">
           <div className="card">
-            <div className="ct"><span className="ctd"/>Causas mais frequentes nas mentorias</div>
+            <div className="ct"><span className="ctd"/>Causas mais frequentes nas mentorias {causaFilter&&<span style={{fontWeight:400,textTransform:"none",letterSpacing:0,fontSize:10,color:C.accent}}>— filtrado: {causaFilter} <button onClick={()=>setCausaFilter(null)} style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:10}}>✕</button></span>}</div>
             {causasRank.length===0
               ?<div style={{padding:"40px 0",textAlign:"center",color:C.muted,fontSize:13}}>Nenhuma causa identificada ainda.</div>
               :<>
@@ -3999,14 +4003,15 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
                     <XAxis type="number" tick={{fill:C.muted,fontSize:11}} axisLine={false} tickLine={false}/>
                     <YAxis dataKey="name" type="category" tick={{fill:C.muted,fontSize:11}} axisLine={false} tickLine={false} width={140}/>
                     <Tooltip content={<CT3/>}/>
-                    <Bar dataKey="value" name="Ocorrencias" radius={[0,6,6,0]}>
-                      {causasRank.map((_,i)=><Cell key={i} fill={[C.accent,C.accent2,C.purple,C.gold,C.orange][i%5]}/>)}
+                    <Bar dataKey="value" name="Ocorrências" radius={[0,6,6,0]} onClick={(d)=>{if(d&&d.name)setCausaFilter(causaFilter===d.name?null:d.name);}} style={{cursor:"pointer"}}>
+                      {causasRank.map((c,i)=><Cell key={i} fill={[C.accent,C.accent2,C.purple,C.gold,C.orange][i%5]} opacity={!causaFilter||causaFilter===c.name?1:0.3}/>)}
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
                 <div style={{marginTop:12}}>
                   {causasRank.map((c,i)=>(
-                    <div key={c.name} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:`1px solid ${C.border}20`}}>
+                    <div key={c.name} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:`1px solid ${C.border}20`,cursor:"pointer",opacity:!causaFilter||causaFilter===c.name?1:0.4}}
+                      onClick={()=>setCausaFilter(causaFilter===c.name?null:c.name)}>
                       <div style={{width:8,height:8,borderRadius:"50%",background:[C.accent,C.accent2,C.purple,C.gold,C.orange][i%5],flexShrink:0}}/>
                       <div style={{flex:1,fontSize:13}}>{c.name}</div>
                       <div style={{fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:14,color:[C.accent,C.accent2,C.purple,C.gold,C.orange][i%5]}}>{c.value}</div>
@@ -4019,13 +4024,14 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
           </div>
 
           <div className="card">
-            <div className="ct"><span className="ctd"/>Nivel de comprometimento nas sessoes</div>
+            <div className="ct"><span className="ctd"/>Nível de comprometimento nas sessões</div>
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
               {[5,4,3,2,1].map(n=>{
                 const cnt=sessions.filter(s=>s.comprometimento===n).length;
                 const pct=sessions.length?Math.round(cnt/sessions.length*100):0;
                 const col=n>=4?C.green:n===3?C.gold:C.red;
-                return(<div key={n} style={{display:"flex",alignItems:"center",gap:10}}>
+                return(<div key={n} style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",opacity:!causaFilter?1:0.7}}
+                  onClick={()=>setCausaFilter(null)}>
                   <div style={{width:28,textAlign:"right",fontSize:13,fontWeight:700,color:col}}>{"★".repeat(n)}</div>
                   <div style={{flex:1,height:18,background:C.border,borderRadius:4,overflow:"hidden"}}>
                     <div style={{width:`${pct}%`,height:"100%",background:col,borderRadius:4,transition:"width 1s ease",display:"flex",alignItems:"center",justifyContent:"flex-end",paddingRight:6}}>
@@ -4038,11 +4044,39 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
             </div>
             <div style={{marginTop:16,padding:"12px 14px",background:C.bg,borderRadius:10,textAlign:"center"}}>
               <div style={{fontFamily:"'Inter',sans-serif",fontSize:32,fontWeight:800,color:compMedio>=4?C.green:compMedio>=3?C.gold:C.red}}>{compMedio}</div>
-              <div style={{fontSize:12,color:C.muted}}>Comprometimento medio geral</div>
+              <div style={{fontSize:12,color:C.muted}}>Comprometimento médio geral</div>
             </div>
           </div>
         </div>
-      )}
+
+        {/* Operadores filtrados pela causa selecionada */}
+        {causaFilter&&(
+          <div className="card" style={{marginTop:16}}>
+            <div className="ct"><span className="ctd"/>Operadores com causa: {causaFilter}</div>
+            {(()=>{
+              const sessFilt=sessions.filter(s=>(s.causas||[]).includes(causaFilter));
+              const reMap={};
+              sessFilt.forEach(s=>{if(!reMap[s.re])reMap[s.re]={re:s.re,nome:s.nome,sessoes:0,compTotal:0};reMap[s.re].sessoes++;reMap[s.re].compTotal+=s.comprometimento||0;});
+              const lista=Object.values(reMap).map(r=>({...r,compMedio:r.sessoes?Math.round(r.compTotal/r.sessoes*10)/10:0}));
+              if(!lista.length) return <div style={{color:C.muted,fontSize:13,padding:12}}>Nenhum operador encontrado.</div>;
+              return <div className="tw"><table>
+                <thead><tr><th>RE</th><th>Operador</th><th>Sessões</th><th>Comprometimento Médio</th><th>Status</th></tr></thead>
+                <tbody>{lista.map(r=>{
+                  const op=ops.find(o=>o.re===r.re);
+                  const stl=op?STATUS_LABEL[op.status]:{label:"—",color:C.muted,bg:`${C.muted}18`};
+                  return <tr key={r.re}>
+                    <td><span className="re-tag">{fmtRE(r.re)}</span></td>
+                    <td style={{fontSize:12,fontWeight:500}}>{r.nome}</td>
+                    <td style={{textAlign:"center",fontWeight:700}}>{r.sessoes}</td>
+                    <td><div style={{display:"flex",alignItems:"center",gap:4}}>{"★".repeat(Math.round(r.compMedio))}<span style={{fontSize:12,color:C.muted}}>{r.compMedio}</span></div></td>
+                    <td>{stl&&<span className="pill" style={{color:stl.color,background:stl.bg}}>● {stl.label}</span>}</td>
+                  </tr>;
+                })}</tbody>
+              </table></div>;
+            })()}
+          </div>
+        )}
+        </>)}
 
       {/* ══ TRATATIVAS ══ */}
       {tab==="tratativas"&&(
@@ -4062,12 +4096,14 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
 
           <div className="g2">
             <div className="card">
-              <div className="ct"><span className="ctd"/>Tratativas por Area</div>
+              <div className="ct"><span className="ctd"/>Tratativas por Área {tratAreaFilter&&<span style={{fontWeight:400,textTransform:"none",letterSpacing:0,fontSize:10,color:C.accent}}>— {tratAreaFilter} <button onClick={()=>setTratAreaFilter(null)} style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:10}}>✕</button></span>}</div>
               {tratAreaList.map(t=>{
                 const ac=AREA_COLORS[t.area]||C.accent;
                 const pct=Math.round(t.concluido/t.total*100);
+                const sel=tratAreaFilter===t.area;
                 return(
-                  <div key={t.area} style={{marginBottom:14}}>
+                  <div key={t.area} style={{marginBottom:14,cursor:"pointer",opacity:!tratAreaFilter||sel?1:0.4,padding:"6px 8px",borderRadius:8,background:sel?`${ac}08`:"transparent"}}
+                    onClick={()=>setTratAreaFilter(sel?null:t.area)}>
                     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}>
                       <span style={{fontSize:18}}>{AREA_ICONS[t.area]}</span>
                       <span style={{fontWeight:600,fontSize:13}}>{t.area}</span>
@@ -4078,7 +4114,7 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
                       <div style={{width:`${pct}%`,height:"100%",background:ac,borderRadius:4}}/>
                     </div>
                     <div style={{display:"flex",gap:8,marginTop:5}}>
-                      {[{l:"Pendente",v:t.pendente||0,c:C.red},{l:"Andamento",v:t.andamento||0,c:C.gold},{l:"Concluido",v:t.concluido||0,c:C.green}]
+                      {[{l:"Pendente",v:t.pendente||0,c:C.red},{l:"Andamento",v:t.andamento||0,c:C.gold},{l:"Concluído",v:t.concluido||0,c:C.green}]
                         .map(s=><span key={s.l} style={{fontSize:10,color:s.c,background:`${s.c}15`,borderRadius:5,padding:"2px 6px"}}>{s.l}: {s.v}</span>)}
                     </div>
                   </div>
@@ -4110,6 +4146,32 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
               </div>
             </div>
           </div>
+
+          {/* Detalhe da área selecionada */}
+          {tratAreaFilter&&(
+            <div className="card" style={{marginTop:16}}>
+              <div className="ct"><span className="ctd"/>{AREA_ICONS[tratAreaFilter]||"📋"} Tratativas — {tratAreaFilter}</div>
+              {(()=>{
+                const lista=tratativas.filter(t=>t.area===tratAreaFilter);
+                if(!lista.length) return <div style={{color:C.muted,fontSize:13,padding:12}}>Nenhuma tratativa.</div>;
+                const ST={concluido:{l:"Concluído",c:C.green},andamento:{l:"Em andamento",c:C.gold},pendente:{l:"Pendente",c:C.red}};
+                return <div className="tw"><table>
+                  <thead><tr><th>RE</th><th>Operador</th><th>Descrição</th><th>Data</th><th>Status</th><th>Retorno</th></tr></thead>
+                  <tbody>{lista.map(t=>{
+                    const st=ST[t.status]||ST.pendente;
+                    return <tr key={t.id}>
+                      <td><span className="re-tag">{fmtRE(t.re)}</span></td>
+                      <td style={{fontSize:12,fontWeight:500}}>{t.nome}</td>
+                      <td style={{fontSize:12,maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.descricao}</td>
+                      <td style={{fontSize:11,color:C.muted}}>{t.data}</td>
+                      <td><span className="pill" style={{color:st.c,background:`${st.c}18`,fontSize:10}}>● {st.l}</span></td>
+                      <td style={{fontSize:11,color:t.retorno?C.green:C.muted,maxWidth:150,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.retorno||"—"}</td>
+                    </tr>;
+                  })}</tbody>
+                </table></div>;
+              })()}
+            </div>
+          )}
         </div>
       )}
 
@@ -4551,10 +4613,11 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
 
   // Filter including day-of-week
   const filtered = agenda.filter(a=>{
-    const sOk = filtStatus==="todos" || a.status===filtStatus;
+    const sOk = filtStatus==="todos" || filtStatus==="hoje" ? true : a.status===filtStatus;
+    const hojeOk = filtStatus==="hoje" ? a.data===fmtDate(hoje) : true;
     const tOk = filtTipo==="todos"   || a.tipo===filtTipo;
     const rOk = !filtRe || a.re.toLowerCase().includes(filtRe.toLowerCase()) || (a.nome||"").toLowerCase().includes(filtRe.toLowerCase());
-    if(!sOk || !tOk || !rOk) return false;
+    if(!sOk || !tOk || !rOk || !hojeOk) return false;
     if(filtDia!=="Todos"){
       const d=parseAgendaDate(a.data);
       if(!d) return false;
@@ -4699,7 +4762,7 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
               <div>
                 <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Data *</div>
                 <input style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none"}}
-                  type="date" min={new Date().toISOString().split("T")[0]}
+                  type="date"
                   value={(()=>{const p=(form.data||"").split("/");return p.length===3?`20${p[2]}-${p[1].padStart(2,"0")}-${p[0].padStart(2,"0")}`:form.data;})()}
                   onChange={e=>{const d=e.target.value.split("-");if(d.length===3)upd("data",`${d[2]}/${d[1]}/${d[0].slice(-2)}`);}}/>
               </div>
