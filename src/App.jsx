@@ -134,6 +134,10 @@ const normalizeKey = (k) => String(k||"").trim().toUpperCase()
 const findCol = (row, ...candidates) => {
   const nk = normalizeKey;
   for (const c of candidates) {
+    // Exact match first (important for single-char like "L")
+    const exact = Object.keys(row).find(k => nk(k) === nk(c));
+    if (exact !== undefined) return exact;
+    // Then partial match
     const found = Object.keys(row).find(k => nk(k).includes(nk(c)));
     if (found !== undefined) return found;
   }
@@ -206,7 +210,7 @@ function processExcel(workbook) {
     const reCol  = findCol(row,"NOREG","RE","REGISTRO","CHAPA","MATRICULA");
     const nmCol  = findCol(row,"NOME","FUNCIONARIO","NAME");
     const fnCol  = findCol(row,"FUNCAO","CARGO","CHAPA");
-    const grCol  = findCol(row,"GARAGEM","SETOR","LOCAL","LOTACAO","LOTAÇÃO","FILIAL","UNIDADE","BASE");
+    const grCol  = findCol(row,"L","GARAGEM","SETOR","LOCAL","LOTACAO","LOTAÇÃO","FILIAL","UNIDADE","BASE");
     const adCol  = findCol(row,"ADMISSAO","ADMISSÃO","DATA ADM","ENTRADA");
     const re = reCol ? String(row[reCol]).trim() : null;
     if (!re) return;
@@ -1015,7 +1019,7 @@ const DashboardPage = ({ data, isReal, onNav, agenda, tratativas, sessions, onVe
 
       <div className="g2 fu d3">
         <div className="card">
-          <div className="ct"><span className="ctd"/>Eventos por Mês</div>
+          <div className="ct"><span className="ctd"/>Eventos por Mês {selectedOp&&<span style={{fontWeight:400,textTransform:"none",letterSpacing:0,fontSize:10,color:C.accent}}>— {selectedOp.nome}: F={selectedOp.faltas} M={selectedOp.multas} A={selectedOp.acidentes} <button onClick={()=>setSelectedOp(null)} style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:10}}>✕ Limpar</button></span>}</div>
           <div className="tr2">
             {["eventos","geral"].map(t=>(
               <button key={t} className={`tb ${chartTab===t?"on":""}`} onClick={()=>setChartTab(t)}>
@@ -1231,8 +1235,9 @@ const DashboardPage = ({ data, isReal, onNav, agenda, tratativas, sessions, onVe
               const pr=PRIOR_MAP[t.prioridade]||{label:"Média",color:C.gold};
               const st=TRAT_ST_MAP[t.status]||{label:t.status,color:C.muted};
               const parts=(t.data||"").split("/");
-              const dataCriacao=parts.length===3?new Date(2000+parseInt(parts[2]),parseInt(parts[1])-1,parseInt(parts[0])):null;
-              const dias=dataCriacao?Math.floor((new Date()-dataCriacao)/(1000*60*60*24)):0;
+              const yr=parts.length===3?parseInt(parts[2]):0;
+              const dataCriacao=parts.length===3?new Date(yr<100?2000+yr:yr,parseInt(parts[1])-1,parseInt(parts[0])):null;
+              const dias=dataCriacao&&!isNaN(dataCriacao.getTime())?Math.max(0,Math.floor((new Date()-dataCriacao)/(1000*60*60*24))):0;
               const diasColor=dias>=6?C.red:dias>=3?C.gold:C.green;
               const diasIcon=dias>=6?"⚠️":"";
               return (
@@ -1244,6 +1249,7 @@ const DashboardPage = ({ data, isReal, onNav, agenda, tratativas, sessions, onVe
                     <div style={{ display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",marginBottom:2 }}>
                       <span className="re-tag" style={{ fontSize:10,padding:"1px 5px" }}>{fmtRE(t.re)}</span>
                       <span style={{ fontSize:12,fontWeight:600 }}>{t.area}{t.subarea?` / ${t.subarea}`:""}</span>
+                      <span style={{ fontSize:10,color:C.muted }}>📅 {t.data}</span>
                       <span style={{ fontSize:10,color:diasColor,fontWeight:700 }}>{diasIcon} {dias}d</span>
                     </div>
                     <div style={{ fontSize:11,color:C.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{t.descricao}</div>
@@ -2314,7 +2320,7 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos, sessions, onNavMent
 
           {/* Custos utilizados */}
           <div style={{display:"flex",gap:12,marginBottom:20,flexWrap:"wrap"}}>
-            {[{l:"Valor Diário",v:fmtBRL(custos.valorDiario),c:C.accent},{l:"VR / Dia",v:fmtBRL(custos.valorVR),c:C.green}].map(x=>(
+            {[{l:`Valor Diário (${op.funcao})`,v:fmtBRL(getValorDia(op.funcao,custos)),c:C.accent},{l:"VR / Dia",v:fmtBRL(custos.valorVR),c:C.green}].map(x=>(
               <div key={x.l} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"10px 16px",flex:1,minWidth:90}}>
                 <div style={{fontSize:11,color:C.muted,marginBottom:2}}>{x.l}</div>
                 <div style={{fontFamily:"'Inter',sans-serif",fontSize:18,fontWeight:800,color:x.c}}>{x.v}</div>
@@ -2335,7 +2341,7 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos, sessions, onNavMent
               <table>
                 <thead><tr><th>Descricao</th><th style={{textAlign:"center"}}>Qtd.</th><th>Item</th><th style={{textAlign:"right"}}>Valor Un.</th><th style={{textAlign:"right"}}>Total Perda</th></tr></thead>
                 <tbody>
-                  {perda.itens.map((item,i)=>(
+                  {[...perda.itens].sort((a,b)=>b.total-a.total).map((item,i)=>(
                     <tr key={i}>
                       <td style={{fontSize:13}}>{item.desc}</td>
                       <td style={{textAlign:"center",fontFamily:"'Inter',sans-serif",fontWeight:700,color:item.qtd===0?C.muted:item.tipo==="falta"?C.red:item.tipo==="multa"?C.orange:C.text}}>{item.qtd}</td>
@@ -3518,7 +3524,8 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions, onVe
               const pct=tot?Math.round((stats.concluido/tot)*100):0;
               const ac=AREA_COLORS[area]||C.accent;
               return(
-                <div key={area} style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",padding:"4px 0",borderRadius:8,transition:"all .2s"}}
+                <div key={area} style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",padding:"6px 8px",borderRadius:8,transition:"all .2s",
+                  background:filtArea===area?`${ac}10`:"transparent",border:`1px solid ${filtArea===area?ac:"transparent"}`,opacity:filtArea!=="todas"&&filtArea!==area?0.4:1}}
                   onClick={()=>{setFiltArea(filtArea===area?"todas":area);}}>
                   <span style={{fontSize:14}}>{AREA_ICONS_MAP[area]||"📋"}</span>
                   <div style={{flex:1,minWidth:0}}>
@@ -4544,6 +4551,7 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
   const [faltouId, setFaltouId] = useState(null);
   const [faltouMotivo, setFaltouMotivo] = useState("");
   const [filtRe, setFiltRe] = useState("");
+  const [filtDate, setFiltDate] = useState(null); // specific date filter
 
   const upd = (k,v) => setForm(f=>({...f,[k]:v}));
 
@@ -4618,9 +4626,10 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
   const filtered = agenda.filter(a=>{
     const sOk = filtStatus==="todos" || filtStatus==="hoje" ? true : a.status===filtStatus;
     const hojeOk = filtStatus==="hoje" ? a.data===fmtDate(hoje) : true;
+    const dateOk = !filtDate || a.data===filtDate;
     const tOk = filtTipo==="todos"   || a.tipo===filtTipo;
     const rOk = !filtRe || a.re.toLowerCase().includes(filtRe.toLowerCase()) || (a.nome||"").toLowerCase().includes(filtRe.toLowerCase());
-    if(!sOk || !tOk || !rOk || !hojeOk) return false;
+    if(!sOk || !tOk || !rOk || !hojeOk || !dateOk) return false;
     if(filtDia!=="Todos"){
       const d=parseAgendaDate(a.data);
       if(!d) return false;
@@ -4764,7 +4773,7 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
               </div>
               <div>
                 <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Data *</div>
-                <input style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none"}}
+                <input style={{background:C.bg,border:`1px solid ${C.border}`,color:C.text,padding:"9px 12px",borderRadius:8,fontSize:13,fontFamily:"'Inter',sans-serif",width:"100%",outline:"none",colorScheme:C.text==="#1a1a2e"?"light":"dark"}}
                   type="date"
                   value={(()=>{const p=(form.data||"").split("/");return p.length===3?`20${p[2]}-${p[1].padStart(2,"0")}-${p[0].padStart(2,"0")}`:form.data;})()}
                   onChange={e=>{const d=e.target.value.split("-");if(d.length===3)upd("data",`${d[2]}/${d[1]}/${d[0].slice(-2)}`);}}/>
@@ -4828,10 +4837,9 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
       </div>
 
       {/* ── KPIs interativos ── */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:16}} className="men-kpi-grid">
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:16}} className="men-kpi-grid">
         {[
           {v:total,        l:"Total Agendado",  c:C.accent,  f:"todos"},
-          {v:deHoje.length,l:"Hoje",            c:C.accent2, f:"hoje"},
           {v:faltaram,     l:"Faltou",          c:C.red,     f:"faltou"},
           {v:realizados,   l:"Compareceu",      c:C.green,   f:"realizado"},
         ].map(x=>(
@@ -4887,7 +4895,7 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
           {/* Strip 7 dias + card Todos */}
           <div className="agenda-week-strip" style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",gap:8,marginBottom:20}}>
             <div style={{background:`${C.accent}10`,border:`1px solid ${C.accent}30`,borderRadius:12,padding:"10px 8px",textAlign:"center",cursor:"pointer"}}
-              onClick={()=>setFiltStatus("todos")}>
+              onClick={()=>{setFiltDate(null);setFiltStatus("todos");}}>
               <div style={{fontSize:10,color:C.accent,fontWeight:600,textTransform:"uppercase",marginBottom:4}}>Todos</div>
               <div style={{fontFamily:"'Inter',sans-serif",fontSize:20,fontWeight:800,color:C.accent,marginBottom:6}}>📅</div>
               <div style={{fontFamily:"'Inter',sans-serif",fontSize:14,fontWeight:700,color:C.accent}}>{agenda.length}</div>
@@ -4896,9 +4904,10 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
             {weekDays.map(d=>{
               const items=byDate[d.date]||[];
               return(
-                <div key={d.date} style={{background:d.isToday?`${C.accent}15`:C.card,border:`1px solid ${d.isToday?C.accent:items.length>0?`${C.accent}40`:C.border}`,
+                <div key={d.date} style={{background:filtDate===d.date?`${C.accent}25`:d.isToday?`${C.accent}15`:C.card,
+                  border:`1px solid ${filtDate===d.date?C.accent:d.isToday?C.accent:items.length>0?`${C.accent}40`:C.border}`,
                   borderRadius:12,padding:"10px 8px",textAlign:"center",cursor:"pointer",transition:"all .2s",position:"relative"}}
-                  onClick={()=>setFiltStatus("todos")}>
+                  onClick={()=>setFiltDate(filtDate===d.date?null:d.date)}>
                   {items.length>0&&<div style={{position:"absolute",top:4,right:4,width:8,height:8,borderRadius:"50%",background:C.accent}}/>}
                   <div style={{fontSize:10,color:d.isToday?C.accent:C.muted,fontWeight:600,textTransform:"uppercase",marginBottom:4}}>{d.label}</div>
                   <div style={{fontFamily:"'Inter',sans-serif",fontSize:20,fontWeight:800,color:d.isToday?C.accent:C.text,marginBottom:6}}>{d.num}</div>
@@ -5701,9 +5710,22 @@ export default function App() {
 
           {/* ── garagem-filtered operators for gestor_gar ── */}
           {(()=>{
+            // Enrich operators with session data
+            const enrichedOps = data.operators.map(op=>{
+              const opSess = sessions.filter(s=>s.re===op.re);
+              if(!opSess.length) return op;
+              const lastSess = opSess[opSess.length-1];
+              return {
+                ...op,
+                status: "mentoria",
+                dataMentoria: op.dataMentoria || lastSess.data,
+                comprometimento: lastSess.comprometimento || op.comprometimento,
+              };
+            });
+            const enrichedData = { ...data, operators: enrichedOps };
             const filteredOps = user?.garagem && user.garagem!=="Todas"
-              ? { ...data, operators: data.operators.filter(o=>o.garagem===user.garagem) }
-              : data;
+              ? { ...enrichedData, operators: enrichedOps.filter(o=>o.garagem===user.garagem) }
+              : enrichedData;
             const filteredAgenda = user?.garagem && user.garagem!=="Todas"
               ? agenda.filter(a=>filteredOps.operators.some(o=>o.re===a.re))
               : agenda;
