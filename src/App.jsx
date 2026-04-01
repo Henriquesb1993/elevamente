@@ -361,18 +361,35 @@ function processExcel(workbook) {
     const comp   = formData[re]?.comprometimento || null;
     // Check if operator has EV="n" in QUERY_PRONTUARIO
     const hasEvN = (ec["n"]||0) > 0;
+    const tl     = evTimeline[re] || [];
+
+    // Count events after mentoria date for operators with EV="n"
+    let evPosCount = 0;
+    if (hasEvN && mentoriaDate[re]) {
+      const mdStr = mentoriaDate[re];
+      let mentDt = null;
+      const p4 = mdStr.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+      if (p4) mentDt = new Date(+p4[3],+p4[2]-1,+p4[1]);
+      else { const p2 = mdStr.match(/(\d{2})\/(\d{2})\/(\d{2})/); if(p2){ const y=+p2[3]<50?2000+ +p2[3]:1900+ +p2[3]; mentDt=new Date(y,+p2[2]-1,+p2[1]); }}
+      if (mentDt) {
+        tl.forEach(ev => {
+          if (ev.ev === "n") return;
+          const dp4 = ev.data?.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+          const dp2 = !dp4 ? ev.data?.match(/(\d{2})\/(\d{2})\/(\d{2})/) : null;
+          let evDt = null;
+          if (dp4) evDt = new Date(+dp4[3],+dp4[2]-1,+dp4[1]);
+          else if (dp2) { const y=+dp2[3]<50?2000+ +dp2[3]:1900+ +dp2[3]; evDt=new Date(y,+dp2[2]-1,+dp2[1]); }
+          if (evDt && evDt >= mentDt) evPosCount++;
+        });
+      }
+    }
 
     // Determine resultado
     let resultado = null;
     if (hasEvN) {
-      // Operador realizou mentoria (EV="n" no prontuário)
-      resultado = "realizou";
+      resultado = evPosCount === 0 ? "melhora" : "piora";
     } else if (hasMen) {
-      if (comp !== null) {
-        resultado = comp >= 4 ? "melhora" : comp <= 2 ? "piora" : "andamento";
-      } else {
-        resultado = "andamento";
-      }
+      resultado = "andamento";
     }
 
     return {
@@ -380,26 +397,22 @@ function processExcel(workbook) {
       faltas, multas: multas2, suspensoes: susp, atestados: atест, acidentes: acid,
       status:         hasMen ? "mentoria" : "aguardando",
       resultado,
+      evPosCount,
       dataMentoria:   mentoriaDate[re] || null,
       comprometimento: comp,
-      timeline:       evTimeline[re] || [],
+      timeline:       tl,
       multasDetalhes: multasDetMap[re] || [],
     };
   }).filter(o => o.re && o.re !== "undefined" && o.re !== "");
 
   // ── KPIs ────────────────────────────────────────────────────────────────
   const total          = operators.length;
-  // Qtd mentorado = REs únicos com EV="n" no QUERY_PRONTUARIO
-  const resMentorados  = new Set();
-  prontuario.forEach(row => {
-    const reCol = findCol(row,"NOREG","RE","REGISTRO","CHAPA","MATRICULA");
-    const evCol = findCol(row,"EV","EVENTO","COD","CODIGO");
-    const re = reCol ? String(row[reCol]).trim() : null;
-    const ev = evCol ? String(row[evCol]).trim() : null;
-    if (re && ev === "n") resMentorados.add(re);
-  });
-  const emMentoria     = resMentorados.size;
+  // Qtd mentorado = operadores com EV="n" (realizaram mentoria)
+  const mentorados     = operators.filter(o=>o.resultado==="melhora"||o.resultado==="piora");
+  const emMentoria     = mentorados.length;
+  // Melhoraram = mentorados com 0 eventos após mentoria
   const melhoraram     = operators.filter(o=>o.resultado==="melhora").length;
+  // Pioraram = mentorados com >0 eventos após mentoria
   const pioraram       = operators.filter(o=>o.resultado==="piora").length;
   const aguardando     = operators.filter(o=>o.status==="aguardando").length;
   const taxaMelhora    = emMentoria>0 ? Math.round((melhoraram/emMentoria)*100) : 0;
@@ -937,8 +950,8 @@ const DashboardPage = ({ data, isReal, onNav, agenda, tratativas, sessions, onVe
   const kpiCards = [
     { icon:"👥", value:kpis.total,        label:"Total Operadores",  color:C.accent,  delta:`base ${isReal?"real":"mock"}`,      up:null,  nav:"operadores" },
     { icon:"🎯", value:kpis.emMentoria,   label:"Qtd mentorado",     color:C.accent2, delta:`de ${kpis.total} totais`,            up:null,  nav:"mentoria"   },
-    { icon:"📈", value:kpis.melhoraram,   label:"Melhoraram",        color:C.green,   delta:`de ${kpis.emMentoria} mentorados`, up:true,  nav:"_melhoraram" },
-    { icon:"📉", value:kpis.pioraram,     label:"Pioraram",          color:C.red,     delta:`de ${kpis.emMentoria} mentorados`, up:false, nav:"_pioraram"   },
+    { icon:"📈", value:kpis.melhoraram,   label:"Melhoraram",        color:C.green,   delta:`0 eventos após mentoria`, up:true,  nav:"_melhoraram" },
+    { icon:"📉", value:kpis.pioraram,     label:"Pioraram",          color:C.red,     delta:`com eventos após mentoria`, up:false, nav:"_pioraram"   },
     { icon:"⏳", value:kpis.aguardando,   label:"Aguardam Mentoria", color:C.orange,  delta:`${kpis.total} − ${kpis.emMentoria} = ${kpis.aguardando}`, up:null, nav:"_aguardando" },
     { icon:"✅", value:`${kpis.taxaMelhora}%`, label:"Taxa de Melhora", color:C.gold, delta:`${kpis.melhoraram} de ${kpis.emMentoria} mentorados`, up:kpis.taxaMelhora>=50, nav:null },
   ];
@@ -1237,14 +1250,13 @@ const DashboardPage = ({ data, isReal, onNav, agenda, tratativas, sessions, onVe
           <div>
             <div style={{ fontFamily:"'Inter',sans-serif",fontSize:16,fontWeight:700,marginBottom:8 }}>Taxa de Melhora</div>
             <div style={{ color:C.muted,fontSize:13,lineHeight:1.8 }}>
-              <span style={{ color:C.green,fontWeight:600 }}>{kpis.melhoraram} de {kpis.emMentoria}</span> operadores<br/>
-              que passaram pela mentoria<br/>apresentaram melhora.
+              <span style={{ color:C.green,fontWeight:600 }}>{kpis.melhoraram} de {kpis.emMentoria}</span> mentorados<br/>
+              sem eventos após a mentoria.
             </div>
             <div style={{ marginTop:12,display:"flex",gap:8,flexWrap:"wrap" }}>
               {[
-                {c:C.green, l:"Melhoraram",   n:kpis.melhoraram},
-                {c:C.gold,  l:"Em avaliação", n:kpis.emMentoria-kpis.melhoraram-kpis.pioraram},
-                {c:C.red,   l:"Pioraram",     n:kpis.pioraram},
+                {c:C.green, l:"0 eventos após",   n:kpis.melhoraram},
+                {c:C.red,   l:"Com eventos após",     n:kpis.pioraram},
               ].map(x=>(
                 <div key={x.l} style={{ background:`${x.c}18`,border:`1px solid ${x.c}30`,borderRadius:8,padding:"4px 10px",fontSize:12,color:x.c,fontWeight:600 }}>{x.n} {x.l}</div>
               ))}
