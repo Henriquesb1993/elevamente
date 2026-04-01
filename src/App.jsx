@@ -3212,14 +3212,13 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions, onVe
           <div style={{fontSize:20,flexShrink:0}}>{AREA_ICONS[t.area]}</div>
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontWeight:600,fontSize:13,marginBottom:2}}>{t.descricao.length>55?t.descricao.slice(0,55)+"…":t.descricao}</div>
-            <div style={{fontSize:11,color:C.muted}}><span className="re-tag" style={{fontSize:10,padding:"1px 5px"}}>{t.re}</span> {t.nome}</div>
+            <div style={{fontSize:11,color:C.muted}}><span className="re-tag" style={{fontSize:10,padding:"1px 5px"}}>{fmtRE(t.re)}</span> {t.nome}</div>
           </div>
           <div style={{fontSize:10,fontWeight:700,color:ac,background:`${ac}18`,padding:"2px 8px",borderRadius:6,whiteSpace:"nowrap",flexShrink:0}}>
             {t.area}
           </div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-          <span className="pill" style={{color:pr.color,background:pr.bg,fontSize:10}}>▲ {pr.label}</span>
           {t.prazo&&<span style={{fontSize:10,color:vencido?C.red:C.muted,fontWeight:vencido?700:400}}>
             📅 {t.prazo}{vencido?" (VENCIDO)":""}
           </span>}
@@ -3480,15 +3479,17 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions, onVe
       {/* ── Dashboard grafico por area ── */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:20}}>
         <div className="card">
-          <div className="ct"><span className="ctd"/>Tratativas por Area</div>
+          <div className="ct"><span className="ctd"/>Tratativas por Área {filtArea!=="todas"&&<span style={{fontWeight:400,textTransform:"none",letterSpacing:0,fontSize:10,color:C.accent}}>— filtrado: {filtArea} <button onClick={()=>setFiltArea("todas")} style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:10}}>✕</button></span>}</div>
           <ResponsiveContainer width="100%" height={200}>
             <PieChart>
               <Pie data={Object.entries(
                 tratativas.reduce((acc,t)=>{acc[t.area]=(acc[t.area]||0)+1;return acc;},{})
               ).map(([name,value])=>({name,value}))}
-              cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value">
-                {tratativas.reduce((acc,t)=>{if(!acc.includes(t.area))acc.push(t.area);return acc;},[]).map((_,i)=>(
-                  <Cell key={i} fill={[C.accent,C.accent2,C.purple,C.gold,C.green,C.orange][i%6]}/>
+              cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value"
+              onClick={(d)=>{if(d&&d.name)setFiltArea(filtArea===d.name?"todas":d.name);}}
+              style={{cursor:"pointer"}}>
+                {tratativas.reduce((acc,t)=>{if(!acc.includes(t.area))acc.push(t.area);return acc;},[]).map((a,i)=>(
+                  <Cell key={i} fill={[C.accent,C.accent2,C.purple,C.gold,C.green,C.orange][i%6]} opacity={filtArea==="todas"||filtArea===a?1:0.3}/>
                 ))}
               </Pie>
               <Tooltip contentStyle={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8}}/>
@@ -3497,7 +3498,7 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions, onVe
           </ResponsiveContainer>
         </div>
         <div className="card">
-          <div className="ct"><span className="ctd"/>Status por Area</div>
+          <div className="ct"><span className="ctd"/>Status por Área</div>
           <div style={{display:"flex",flexDirection:"column",gap:10,padding:"8px 0"}}>
             {Object.entries(
               tratativas.reduce((acc,t)=>{
@@ -3511,7 +3512,7 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions, onVe
               const ac=AREA_COLORS[area]||C.accent;
               return(
                 <div key={area} style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",padding:"4px 0",borderRadius:8,transition:"all .2s"}}
-                  onClick={()=>{setFiltArea(area);setTab("kanban");}}>
+                  onClick={()=>{setFiltArea(filtArea===area?"todas":area);}}>
                   <span style={{fontSize:14}}>{AREA_ICONS_MAP[area]||"📋"}</span>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}>
@@ -3624,7 +3625,13 @@ const TratativasPage = ({ tratativas, onUpdate, onAdd, operators, sessions, onVe
 // ─── RELATORIOS PAGE ──────────────────────────────────────────────────────────
 const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
   const [tab, setTab] = useState("visao");
-  const ops = data.operators || [];
+  const [filtGaragem, setFiltGaragem] = useState("todas");
+  const [rankSort, setRankSort] = useState({col:"score",dir:"desc"});
+  const [causaFilter, setCausaFilter] = useState(null);
+  const [tratAreaFilter, setTratAreaFilter] = useState(null);
+  const allOps = data.operators || [];
+  const garagens = [...new Set(allOps.map(o=>o.garagem).filter(Boolean))].sort();
+  const ops = filtGaragem==="todas"?allOps:allOps.filter(o=>o.garagem===filtGaragem);
 
   // ── KPIs gerais ──────────────────────────────────────────────────────────
   const total       = ops.length;
@@ -3764,11 +3771,11 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
   };
 
   const TABS=[
-    {id:"visao",    label:"📊 Visao Geral"},
+    {id:"visao",    label:"📊 Visão Geral"},
     {id:"ranking",  label:"🏆 Ranking"},
     {id:"causas",   label:"🔍 Causas"},
     {id:"tratativas",label:"🔁 Tratativas"},
-    {id:"evolucao", label:"📈 Evolucao"},
+    {id:"evolucao", label:"📈 Evolução"},
   ];
 
   return (
@@ -3778,7 +3785,7 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
       {/* Header */}
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20,flexWrap:"wrap"}} className="no-print">
         <div>
-          <div style={{fontFamily:"'Inter',sans-serif",fontSize:18,fontWeight:700}}>Relatorios Gerenciais</div>
+          <div style={{fontFamily:"'Inter',sans-serif",fontSize:18,fontWeight:700}}>Relatórios Gerenciais</div>
           <div style={{fontSize:12,color:C.muted,marginTop:2}}>Gerado em {new Date().toLocaleString("pt-BR")}</div>
         </div>
         <div style={{flex:1}}/>
@@ -3807,6 +3814,17 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
             {t.label}
           </button>
         ))}
+      </div>
+
+      {/* ── Filtro por Garagem ── */}
+      <div style={{display:"flex",gap:8,marginBottom:16,alignItems:"center"}} className="no-print">
+        <span style={{fontSize:12,color:C.muted,fontWeight:600}}>Garagem:</span>
+        <select style={{background:C.card,border:`1px solid ${C.border}`,color:C.text,padding:"7px 12px",borderRadius:8,fontSize:12,fontFamily:"'Inter',sans-serif",outline:"none"}}
+          value={filtGaragem} onChange={e=>setFiltGaragem(e.target.value)}>
+          <option value="todas">Todas</option>
+          {garagens.map(g=><option key={g} value={g}>{g}</option>)}
+        </select>
+        {filtGaragem!=="todas"&&<button onClick={()=>setFiltGaragem("todas")} style={{background:`${C.red}15`,border:`1px solid ${C.red}30`,borderRadius:6,padding:"4px 10px",fontSize:11,color:C.red,cursor:"pointer"}}>✕ Limpar</button>}
       </div>
 
       {/* ══ VISAO GERAL ══ */}
@@ -3897,17 +3915,31 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
       {tab==="ranking"&&(
         <div>
           <div style={{padding:"12px 16px",background:`${C.orange}10`,border:`1px solid ${C.orange}25`,borderRadius:10,marginBottom:16,fontSize:12,color:C.muted}}>
-            📊 <strong style={{color:C.orange}}>Score de risco</strong> = Faltas×3 + Multas×2 + Suspensoes×5 + Acidentes×4. Quanto maior, mais atencao necessaria.
+            📊 <strong style={{color:C.orange}}>Score de risco</strong> = Faltas×3 + Multas×2 + Suspensões×5 + Acidentes×4. Quanto maior, mais atenção necessária. <em>Clique nas colunas para ordenar.</em>
           </div>
           <div className="card">
             <div className="ct"><span className="ctd"/>🏆 Ranking de Operadores por Risco</div>
             <div className="tw">
               <table>
                 <thead>
-                  <tr><th>#</th><th>RE</th><th>Operador</th><th>Garagem</th><th className="mob-hide">F</th><th className="mob-hide">M</th><th className="mob-hide">S</th><th className="mob-hide">Acid.</th><th>Score</th><th>Status</th><th>Perda Est.</th></tr>
+                  <tr><th>#</th>
+                    {[{k:"re",l:"RE"},{k:"nome",l:"Operador"},{k:"garagem",l:"Garagem"},{k:"faltas",l:"F",cls:"mob-hide"},{k:"multas",l:"M",cls:"mob-hide"},{k:"suspensoes",l:"S",cls:"mob-hide"},{k:"acidentes",l:"Acid.",cls:"mob-hide"},{k:"score",l:"Score"},{k:"status",l:"Status"},{k:"perda",l:"Perda Est."}].map(h=>(
+                      <th key={h.k} className={h.cls||""} style={{cursor:"pointer",userSelect:"none"}} onClick={()=>setRankSort(s=>s.col===h.k?{col:h.k,dir:s.dir==="desc"?"asc":"desc"}:{col:h.k,dir:"desc"})}>
+                        {h.l} {rankSort.col===h.k?(rankSort.dir==="asc"?"↑":"↓"):""}
+                      </th>
+                    ))}
+                  </tr>
                 </thead>
                 <tbody>
-                  {ranking.map((op,i)=>{
+                  {[...ranking].sort((a,b)=>{
+                    let av=a[rankSort.col],bv=b[rankSort.col];
+                    if(rankSort.col==="perda"){
+                      const calcP=o=>{const f=o.faltas||0,at=o.atestados||0,d=Math.round(f*0.70),fp=f<=5?0:f<=14?6:f<=23?12:f<=32?18:30;return f*custos.valorDiario+d*custos.valorDiario+fp*custos.valorDiario+fp*(custos.valorDiario/3)+at*custos.valorVR+(o.multasValor||0);};
+                      av=calcP(a);bv=calcP(b);
+                    }
+                    if(typeof av==="number"&&typeof bv==="number") return rankSort.dir==="asc"?av-bv:bv-av;
+                    return rankSort.dir==="asc"?String(av||"").localeCompare(String(bv||"")):String(bv||"").localeCompare(String(av||""));
+                  }).map((op,i)=>{
                     const ac=avatarColor(op.re);
                     const faltas=op.faltas||0,atestados=op.atestados||0,dsr=Math.round(faltas*0.70);
                     const ferP=faltas<=5?0:faltas<=14?6:faltas<=23?12:faltas<=32?18:30;
@@ -5213,6 +5245,7 @@ export default function App() {
   const [col, setCol]               = useState(false);
   const [mobOpen, setMobOpen]       = useState(false);
   const [active, setActive]         = useState("dashboard");
+  const [prevActive, setPrevActive] = useState("operadores");
   const [selectedOp, setSelectedOp] = useState(null);
   const [custos, setCustos]         = useState(CUSTOS_PADRAO);
   const [sessions, setSessions]     = useState(SESSIONS_INIT);
@@ -5597,9 +5630,9 @@ export default function App() {
             const ops = filteredOps.operators;
 
             return <>
-          {active==="dashboard"   && <DashboardPage data={filteredOps} isReal={isReal} onNav={setActive} agenda={filteredAgenda} tratativas={filteredTrat} sessions={sessions} onVerFicha={(op)=>{setSelectedOp(op);setActive("ficha");}}/>}
-          {active==="operadores"  && <OperadoresPage operators={ops} onVerFicha={(op)=>{ setSelectedOp(op); setActive("ficha"); }}/>}
-          {active==="ficha"       && <FichaPage op={selectedOp} onBack={()=>setActive("operadores")} globalCustos={custos} onSaveCustos={setCust} sessions={sessions} tratativas={filteredTrat} onNavMentoria={()=>setActive("mentoria")} onNavAgenda={()=>setActive("agenda")} onNavParametros={()=>setActive("parametros")} onNavTratativas={()=>setActive("tratativas")}/>}
+          {active==="dashboard"   && <DashboardPage data={filteredOps} isReal={isReal} onNav={setActive} agenda={filteredAgenda} tratativas={filteredTrat} sessions={sessions} onVerFicha={(op)=>{setSelectedOp(op);setPrevActive("dashboard");setActive("ficha");}}/>}
+          {active==="operadores"  && <OperadoresPage operators={ops} onVerFicha={(op)=>{ setSelectedOp(op);setPrevActive("operadores"); setActive("ficha"); }}/>}
+          {active==="ficha"       && <FichaPage op={selectedOp} onBack={()=>setActive(prevActive||"operadores")} globalCustos={custos} onSaveCustos={setCust} sessions={sessions} tratativas={filteredTrat} onNavMentoria={()=>setActive("mentoria")} onNavAgenda={()=>setActive("agenda")} onNavParametros={()=>setActive("parametros")} onNavTratativas={()=>setActive("tratativas")}/>}
           {active==="mentoria"    && <MentoriaPage operators={ops} sessions={sessions}
   onDelete={id=>{
     setSess(prev=>prev.filter(s=>s.id!==id));
@@ -5625,7 +5658,7 @@ export default function App() {
   }
 }}/>}
           {active==="agenda"      && <AgendaPage agenda={filteredAgenda} onUpdate={setAgd} onAdd={a=>setAgd(prev=>[...prev,a])} operators={ops}/>}
-          {active==="tratativas"  && <TratativasPage tratativas={filteredTrat} onUpdate={setTrat} onAdd={t=>{setTrat(prev=>[...prev,t]);audit("Nova tratativa: "+t.area+" - "+t.re, "Criou");}} operators={ops} sessions={sessions} onVerFicha={(op)=>{setSelectedOp(op);setActive("ficha");}}/>}
+          {active==="tratativas"  && <TratativasPage tratativas={filteredTrat} onUpdate={setTrat} onAdd={t=>{setTrat(prev=>[...prev,t]);audit("Nova tratativa: "+t.area+" - "+t.re, "Criou");}} operators={ops} sessions={sessions} onVerFicha={(op)=>{setSelectedOp(op);setPrevActive("tratativas");setActive("ficha");}}/>}
           {active==="relatorios"  && <RelatoriosPage data={filteredOps} sessions={sessions} tratativas={filteredTrat} custos={custos}/>}
           {active==="auditoria"   && <AuditoriaPage auditLogs={auditLogs} user={user}/>}
           {active==="parametros"  && <ParametrosPage custos={custos} onSave={setCust}/>}
