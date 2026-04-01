@@ -618,7 +618,7 @@ tr:last-child td{border-bottom:none}
 /* Kanban mobile: stack columns vertically */
 @media(max-width:768px){
   .kanban-grid{grid-template-columns:1fr!important}
-  .agenda-week-strip{grid-template-columns:repeat(4,1fr)!important}
+  .agenda-week-strip{grid-template-columns:repeat(4,1fr)!important;gap:6px!important}
   .dia-filter{flex-wrap:wrap!important}
   .dia-filter button{padding:4px 8px!important;font-size:10px!important}
 }
@@ -1427,9 +1427,12 @@ const BasePage = ({ fileName, fileSize, sheetSummary, onUpload, onDelete, isReal
             <div className="file-chip">
               <span style={{ fontSize:20 }}>📊</span>
               <div><div className="file-name">{fileName}</div><div className="file-size">{fmt(fileSize)}</div></div>
-              <button className="del-btn" onClick={onDelete}>🗑 Deletar base</button>
+              <button className="del-btn" onClick={onDelete}>🗑 Deletar base (Admin)</button>
             </div>
-            <div style={{ marginTop:10,fontSize:12,color:C.muted }}>Para atualizar: delete a base atual e faça upload da versão nova.</div>
+            <div style={{ marginTop:10,fontSize:12,color:C.muted }}>
+              ✅ Dados gravados no navegador. Só serão apagados quando o perfil Administrador deletar.
+            </div>
+            <div style={{ marginTop:8,fontSize:12,color:C.muted }}>Para atualizar: delete a base atual e faça upload da versão nova.</div>
           </div>
         )}
 
@@ -4881,14 +4884,22 @@ const AgendaPage = ({ agenda, onUpdate, onAdd, operators }) => {
       {/* ══ VISAO SEMANA ══ */}
       {view==="semana" && (
         <div>
-          {/* Strip 7 dias */}
-          <div className="agenda-week-strip" style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:8,marginBottom:20}}>
+          {/* Strip 7 dias + card Todos */}
+          <div className="agenda-week-strip" style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",gap:8,marginBottom:20}}>
+            <div style={{background:`${C.accent}10`,border:`1px solid ${C.accent}30`,borderRadius:12,padding:"10px 8px",textAlign:"center",cursor:"pointer"}}
+              onClick={()=>setFiltStatus("todos")}>
+              <div style={{fontSize:10,color:C.accent,fontWeight:600,textTransform:"uppercase",marginBottom:4}}>Todos</div>
+              <div style={{fontFamily:"'Inter',sans-serif",fontSize:20,fontWeight:800,color:C.accent,marginBottom:6}}>📅</div>
+              <div style={{fontFamily:"'Inter',sans-serif",fontSize:14,fontWeight:700,color:C.accent}}>{agenda.length}</div>
+              <div style={{fontSize:9,color:C.muted}}>total</div>
+            </div>
             {weekDays.map(d=>{
               const items=byDate[d.date]||[];
               return(
-                <div key={d.date} style={{background:d.isToday?`${C.accent}15`:C.card,border:`1px solid ${d.isToday?C.accent:C.border}`,
-                  borderRadius:12,padding:"10px 8px",textAlign:"center",cursor:"pointer",transition:"all .2s"}}
+                <div key={d.date} style={{background:d.isToday?`${C.accent}15`:C.card,border:`1px solid ${d.isToday?C.accent:items.length>0?`${C.accent}40`:C.border}`,
+                  borderRadius:12,padding:"10px 8px",textAlign:"center",cursor:"pointer",transition:"all .2s",position:"relative"}}
                   onClick={()=>setFiltStatus("todos")}>
+                  {items.length>0&&<div style={{position:"absolute",top:4,right:4,width:8,height:8,borderRadius:"50%",background:C.accent}}/>}
                   <div style={{fontSize:10,color:d.isToday?C.accent:C.muted,fontWeight:600,textTransform:"uppercase",marginBottom:4}}>{d.label}</div>
                   <div style={{fontFamily:"'Inter',sans-serif",fontSize:20,fontWeight:800,color:d.isToday?C.accent:C.text,marginBottom:6}}>{d.num}</div>
                   {items.length>0
@@ -5442,10 +5453,19 @@ export default function App() {
   };
 
   const handleDelete = () => {
+    if(user?.perfil!=="admin"){toast("Apenas administradores podem deletar a base.","error");return;}
+    if(!window.confirm("Tem certeza que deseja deletar a base de dados? Esta ação não pode ser desfeita.")){return;}
     setData(MOCK);
     setIsReal(false);
     setFileName(null);
     setFileSize(0);
+    try{
+      localStorage.removeItem("elevamente_excel_data");
+      localStorage.removeItem("elevamente_excel_name");
+      localStorage.removeItem("elevamente_excel_size");
+    }catch(e){}
+    toast("Base de dados deletada.","info");
+    audit("Base de dados deletada","Apagou");
   };
 
   return (
