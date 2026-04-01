@@ -178,7 +178,7 @@ function processExcel(workbook) {
     return XLSX.utils.sheet_to_json(workbook.Sheets[sn], { defval:"" });
   };
 
-  const prontuario  = get("PRONTUARIO");
+  const prontuario  = get("QUERY PRONTUARIO") || get("QUERY_PRONTUARIO") || get("EVENTOS PRONT") || get("PRONTUARIO");
   const multas      = get("MULTA");
   const acidentes   = get("ACIDENTE");
   const quadro      = get("QUADRO");
