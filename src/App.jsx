@@ -1063,20 +1063,30 @@ const DashboardPage = ({ data, isReal, onNav, agenda, tratativas, sessions, onVe
             const fallbackColors = ["#6366f1","#8b5cf6","#ec4899","#14b8a6","#f59e0b","#64748b","#0ea5e9","#84cc16","#e11d48","#a855f7"];
             const evColor = (ev,i) => EV_COLOR[ev] || fallbackColors[i % fallbackColors.length];
 
+            // Parse date string dd/mm/yy or dd/mm/yyyy -> { d, m, y, date, mmyyyy }
+            const parseDate = (s) => {
+              if (!s) return null;
+              let p = s.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+              if (p) return { d:+p[1], m:+p[2], y:+p[3], date: new Date(+p[3],+p[2]-1,+p[1]), mmyyyy: p[2]+"/"+p[3] };
+              p = s.match(/(\d{2})\/(\d{2})\/(\d{2})/);
+              if (p) { const y=+p[3]<50?2000+ +p[3]:1900+ +p[3]; return { d:+p[1], m:+p[2], y, date: new Date(y,+p[2]-1,+p[1]), mmyyyy: p[2]+"/"+y }; }
+              return null;
+            };
+
             // Build operator-specific data from timeline when selected
             let evData = eventosMes;
             let activeEvTypes = evTypesSorted;
-            let mentoriaMonth = null; // MM/YYYY of mentoria for reference line
+            let mentoriaMonth = null;
 
             if (selectedOp && selectedOp.timeline?.length) {
               const byMonth = {};
               const opEvTypes = new Set();
               selectedOp.timeline.forEach(ev => {
-                if (ev.ev === "n") return; // skip mentoria marker
-                const dp = ev.data?.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+                if (ev.ev === "n") return;
+                const dp = parseDate(ev.data);
                 if (!dp) return;
-                const mes = dp[2]+"/"+dp[3];
-                if (!byMonth[mes]) byMonth[mes] = { mes, _sort: dp[3]+"-"+dp[2] };
+                const mes = dp.mmyyyy;
+                if (!byMonth[mes]) byMonth[mes] = { mes, _sort: String(dp.y)+"-"+String(dp.m).padStart(2,"0") };
                 byMonth[mes][ev.ev] = (byMonth[mes][ev.ev]||0) + 1;
                 opEvTypes.add(ev.ev);
               });
@@ -1089,37 +1099,34 @@ const DashboardPage = ({ data, isReal, onNav, agenda, tratativas, sessions, onVe
                   return { ...m, total };
                 });
               // Find mentoria month
-              if (selectedOp.dataMentoria && selectedOp.dataMentoria !== "–") {
-                const mp = selectedOp.dataMentoria.match(/(\d{2})\/(\d{2})\/(\d{4})/);
-                if (mp) mentoriaMonth = mp[2]+"/"+mp[3];
-              }
+              const mp = parseDate(selectedOp.dataMentoria);
+              if (mp) mentoriaMonth = mp.mmyyyy;
             }
 
             // Build "Antes vs Depois" data for selected operator
             let antesDepoisData = null;
-            if (selectedOp && selectedOp.timeline?.length && selectedOp.dataMentoria && selectedOp.dataMentoria !== "–") {
-              const mp = selectedOp.dataMentoria.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+            if (selectedOp && selectedOp.timeline?.length) {
+              const mp = parseDate(selectedOp.dataMentoria);
               if (mp) {
-                const mentDate = new Date(+mp[3], +mp[2]-1, +mp[1]);
+                const mentDate = mp.date;
                 const antes = {}, depois = {};
                 const antesTypes = new Set(), depoisTypes = new Set();
                 let antesTotal = 0, depoisTotal = 0;
                 let antesMonths = new Set(), depoisMonths = new Set();
                 selectedOp.timeline.forEach(ev => {
                   if (ev.ev === "n") return;
-                  const dp = ev.data?.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+                  const dp = parseDate(ev.data);
                   if (!dp) return;
-                  const evDate = new Date(+dp[3], +dp[2]-1, +dp[1]);
-                  if (evDate < mentDate) {
+                  if (dp.date < mentDate) {
                     antes[ev.ev] = (antes[ev.ev]||0) + 1;
                     antesTypes.add(ev.ev);
                     antesTotal++;
-                    antesMonths.add(dp[2]+"/"+dp[3]);
+                    antesMonths.add(dp.mmyyyy);
                   } else {
                     depois[ev.ev] = (depois[ev.ev]||0) + 1;
                     depoisTypes.add(ev.ev);
                     depoisTotal++;
-                    depoisMonths.add(dp[2]+"/"+dp[3]);
+                    depoisMonths.add(dp.mmyyyy);
                   }
                 });
                 const allTypes = [...new Set([...antesTypes, ...depoisTypes])].sort();
@@ -1256,40 +1263,37 @@ const DashboardPage = ({ data, isReal, onNav, agenda, tratativas, sessions, onVe
                 ))}
               </tr></thead>
               <tbody>
-                {operators.filter(o=>o.resultado==="piora"||o.resultado==="andamento"||o.resultado==="realizou"||o.status==="aguardando")
+                {(()=>{
+                  // Helper to parse dd/mm/yy or dd/mm/yyyy
+                  const pDt = (s) => {
+                    if (!s) return null;
+                    let p = s.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+                    if (p) return { date: new Date(+p[3],+p[2]-1,+p[1]), mm: p[2]+"/"+p[3] };
+                    p = s.match(/(\d{2})\/(\d{2})\/(\d{2})/);
+                    if (p) { const y=+p[3]<50?2000+ +p[3]:1900+ +p[3]; return { date: new Date(y,+p[2]-1,+p[1]), mm: p[2]+"/"+y }; }
+                    return null;
+                  };
+                  return operators.filter(o=>o.resultado==="piora"||o.resultado==="andamento"||o.resultado==="realizou"||o.status==="aguardando")
                   .map(o=>{
                     const totalEv=(o.faltas||0)+(o.multas||0)+(o.acidentes||0)+(o.atestados||0);
                     const tl=o.timeline||[];
-                    const dtMent=o.dataMentoria;
-                    // Parse mentoria date for comparison
-                    let mentDate=null;
-                    if(dtMent && dtMent!=="–"){
-                      const p=dtMent.match(/(\d{2})\/(\d{2})\/(\d{4})/);
-                      if(p) mentDate=new Date(+p[3],+p[2]-1,+p[1]);
-                    }
-                    // Count events before and after mentoria
+                    const mp=pDt(o.dataMentoria);
+                    const mentDate=mp?.date||null;
                     let evAntes=0, evPos=0, mesesSet=new Set();
                     tl.forEach(ev=>{
-                      if(ev.ev==="n") return; // skip mentoria event itself
-                      const dp=ev.data?.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+                      if(ev.ev==="n") return;
+                      const dp=pDt(ev.data);
                       if(!dp) return;
-                      const evDate=new Date(+dp[3],+dp[2]-1,+dp[1]);
                       if(mentDate){
-                        if(evDate<mentDate){
-                          evAntes++;
-                          mesesSet.add(dp[2]+"/"+dp[3]);
-                        } else {
-                          evPos++;
-                        }
-                      } else {
-                        evAntes++;
-                        mesesSet.add(dp[2]+"/"+dp[3]);
-                      }
+                        if(dp.date<mentDate){ evAntes++; mesesSet.add(dp.mm); }
+                        else { evPos++; }
+                      } else { evAntes++; mesesSet.add(dp.mm); }
                     });
                     const nMeses=mesesSet.size||1;
                     const mediaEvMes=Math.round((evAntes/nMeses)*10)/10;
                     return {...o, totalEv, mediaEvMes, evPosMentoria:mentDate?evPos:null};
                   })
+                })()
                   .sort((a,b)=>{
                     if(!sortCol) return 0;
                     const av=a[sortCol], bv=b[sortCol];
