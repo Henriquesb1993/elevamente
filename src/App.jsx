@@ -206,7 +206,7 @@ function processExcel(workbook) {
     const reCol  = findCol(row,"NOREG","RE","REGISTRO","CHAPA","MATRICULA");
     const nmCol  = findCol(row,"NOME","FUNCIONARIO","NAME");
     const fnCol  = findCol(row,"FUNCAO","CARGO","CHAPA");
-    const grCol  = findCol(row,"GARAGEM","SETOR","LOCAL");
+    const grCol  = findCol(row,"GARAGEM","SETOR","LOCAL","LOTACAO","LOTAÇÃO","FILIAL","UNIDADE","BASE");
     const adCol  = findCol(row,"ADMISSAO","ADMISSÃO","DATA ADM","ENTRADA");
     const re = reCol ? String(row[reCol]).trim() : null;
     if (!re) return;
@@ -1355,7 +1355,7 @@ const OperadoresPage = ({ operators, onVerFicha }) => {
             <div className="op-info">
               <div className="op-nome">{op.nome}</div>
               <div className="op-sub">
-                <span className="re-tag" style={{ fontSize:11,padding:"2px 6px" }}>{op.re}</span>
+                <span className="re-tag" style={{ fontSize:14,padding:"3px 10px",fontWeight:800 }}>{fmtRE(op.re)}</span>
                 &nbsp;{op.funcao} · {op.garagem} · Adm: {op.admissao}
               </div>
             </div>
@@ -1518,13 +1518,11 @@ function calcPerdaFinanceira(op, custos) {
   const v13       = parseFloat(((perc13||0)/100 * valorDiario * faltas).toFixed(2));
 
   const itens = [
-    { desc:"Faltas — desconto do dia",                                   qtd:faltas,    un:"Dia (função)",   valorUn:valorDiario,         total:faltas*valorDiario,       tipo:"falta"   },
-    { desc:"DSR por faltas (máx. 4/mês)",                                qtd:dsr,       un:"Dia (DSR)",      valorUn:valorDiario,         total:dsr*valorDiario,          tipo:"dsr"     },
+    { desc:"Faltas",                                                      qtd:faltas,    un:"Dia (função)",   valorUn:valorDiario,         total:faltas*valorDiario,       tipo:"falta"   },
+    { desc:"DSR por Faltas",                                              qtd:dsr,       un:"Dia (DSR)",      valorUn:valorDiario,         total:dsr*valorDiario,          tipo:"dsr"     },
     { desc:`Férias perdidas (${faltas} faltas → perde ${ferPerd} dias)`, qtd:ferPerd,   un:"Dia (férias)",   valorUn:valorDiario,         total:ferPerd*valorDiario,      tipo:"ferias"  },
     { desc:"Abono de férias (1/3) sobre dias perdidos",                  qtd:ferPerd,   un:"1/3 do dia",     valorUn:valorAbono,          total:ferPerd*valorAbono,       tipo:"abono"   },
     { desc:"Atestados — perda VR",                                       qtd:atestados, un:"VR/dia",         valorUn:valorVR||0,          total:atestados*(valorVR||0),   tipo:"vr"      },
-    { desc:"Faltas — perda VT (economia empresa)",                       qtd:faltas,    un:"VT/dia",         valorUn:valorVT||0,          total:faltas*(valorVT||0),      tipo:"vt"      },
-    { desc:"Custo de substituição (horas extras)",                        qtd:faltas,    un:"Subst/dia",      valorUn:custSubst,           total:faltas*custSubst,         tipo:"subst"   },
     { desc:"Suspensões — dias parados (custo produtivo)",                qtd:suspensoes,un:"Dia (suspenso)", valorUn:valorDiario,         total:suspensoes*valorDiario,   tipo:"suspensao"},
     { desc:`13º proporcional perdido pelas faltas (${perc13||0}%/falta)`,qtd:faltas,    un:"% do dia",       valorUn:v13>0?v13/faltas:0,  total:v13,                      tipo:"13o"     },
     { desc:`FGTS sobre férias perdidas (${percFGTS||0}%)`,               qtd:ferPerd,   un:"% do dia",       valorUn:ferPerd>0?vfgts/ferPerd:0, total:vfgts,             tipo:"fgts"    },
@@ -1984,7 +1982,7 @@ async function gerarPDFRelatorio(data, sessions, tratativas, custos) {
 const MULTAS_DETAIL_MOCK = {};
 
 // ─── FICHA PAGE ───────────────────────────────────────────────────────────────
-const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
+const FichaPage = ({ op, onBack, globalCustos, onSaveCustos, sessions, onNavMentoria, onNavAgenda, onNavParametros, onNavTratativas, tratativas: globalTratativas }) => {
   const [tab, setTab]               = useState("resumo");
   const [custos, setCustos]         = useState(globalCustos || CUSTOS_PADRAO);
   const [editCustos, setEditCustos] = useState(false);
@@ -2062,7 +2060,7 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
   const TABS=[
     {id:"resumo",    label:"📊 Resumo & Eventos"},
     {id:"financeiro",label:"💰 Perda Financeira"},
-    {id:"multas",    label:`⚖️ Multas${multasDet.length>0?" ("+multasDet.length+")":""}`,},
+    {id:"multas",    label:`⚖️ Multas e Reclamações${multasDet.length>0||timeline.filter(e=>e.ev==="O").length>0?" ("+(multasDet.length+timeline.filter(e=>e.ev==="O").length)+")":""}`,},
     {id:"timeline",  label:"📅 Timeline"},
     {id:"mentoria",  label:"💬 Mentoria"},
     {id:"tratativas",label:"🔁 Tratativas"},
@@ -2119,7 +2117,7 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
       {/* ── HEADER ── */}
       <div className="ficha-header" style={{marginBottom:16}}>
         <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:2,color:C.muted,marginBottom:10}}>
-          PERFIL DO OPERADOR - Relatorio Gerencial (Diretoria) · {op.re}
+          PERFIL DO OPERADOR - Relatório Gerencial (Diretoria) · {fmtRE(op.re)}
         </div>
         <div style={{display:"flex",gap:20,alignItems:"flex-start",flexWrap:"wrap"}}>
           <div className="ficha-avatar" style={{background:`${ac}20`,color:ac,border:`2px solid ${ac}40`,width:64,height:64,borderRadius:16,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Inter',sans-serif",fontWeight:800,fontSize:22,flexShrink:0}}>
@@ -2128,10 +2126,10 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
           <div style={{flex:1,minWidth:200}}>
             <div style={{fontFamily:"'Inter',sans-serif",fontSize:22,fontWeight:800,marginBottom:6}}>{op.nome}</div>
             <div style={{display:"flex",gap:12,flexWrap:"wrap",fontSize:13,color:C.muted,marginBottom:10}}>
-              <span className="re-tag">{fmtRE(op.re)}</span>
+              <span className="re-tag" style={{fontSize:16,padding:"4px 12px",fontWeight:800}}>{fmtRE(op.re)}</span>
               <span>📌 {op.funcao}</span>
-              <span>🚌 Garagem {op.garagem}</span>
-              <span>📅 Admissao: {op.admissao}</span>
+              <span>🚌 Garagem: {op.garagem}</span>
+              <span>📅 Admissão: {op.admissao}</span>
               <span>⏱ {tempoCasa}</span>
             </div>
             <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
@@ -2165,7 +2163,7 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
           {[
             {v:op.faltas,       l:"Faltas",      c:op.faltas>=10?C.red:op.faltas>=5?C.orange:C.muted},
             {v:op.multas,       l:"Multas",      c:op.multas>=5?C.red:op.multas>=3?C.orange:C.muted},
-            {v:op.suspensoes||0,l:"Suspensoes",  c:(op.suspensoes||0)>=2?C.red:(op.suspensoes||0)>=1?C.orange:C.muted},
+            {v:op.suspensoes||0,l:"Suspensões",  c:(op.suspensoes||0)>=2?C.red:(op.suspensoes||0)>=1?C.orange:C.muted},
             {v:op.atestados||0, l:"Atestados",   c:C.muted},
             {v:op.acidentes,    l:"Acidentes",   c:op.acidentes>=2?C.red:op.acidentes>=1?C.orange:C.muted},
           ].map(s=>(
@@ -2218,7 +2216,7 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
               <div className="ct"><span className="ctd"/>■ Eventos por Tipo (EV) - Contagem</div>
               <div className="tw">
                 <table>
-                  <thead><tr><th>EV</th><th>Descricao do EV</th><th style={{textAlign:"right"}}>Quantidade</th></tr></thead>
+                  <thead><tr><th>EV</th><th>Descrição do EV</th><th style={{textAlign:"right"}}>Quantidade</th></tr></thead>
                   <tbody>
                     {evTipoList.map(e=>{
                       const cor=EV_COLOR[e.ev]||C.muted;
@@ -2309,18 +2307,23 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
 
           {/* Custos utilizados */}
           <div style={{display:"flex",gap:12,marginBottom:20,flexWrap:"wrap"}}>
-            {[{l:"Valor Diario",v:fmtBRL(custos.valorDiario),c:C.accent},{l:"VR / Dia",v:fmtBRL(custos.valorVR),c:C.green},{l:"1/3 Ferias",v:fmtBRL(custos.valorDiario/3),c:C.gold}].map(x=>(
+            {[{l:"Valor Diário",v:fmtBRL(custos.valorDiario),c:C.accent},{l:"VR / Dia",v:fmtBRL(custos.valorVR),c:C.green}].map(x=>(
               <div key={x.l} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"10px 16px",flex:1,minWidth:90}}>
                 <div style={{fontSize:11,color:C.muted,marginBottom:2}}>{x.l}</div>
                 <div style={{fontFamily:"'Inter',sans-serif",fontSize:18,fontWeight:800,color:x.c}}>{x.v}</div>
               </div>
             ))}
-            <button className="abt no-print" style={{padding:"10px 16px",alignSelf:"center"}} onClick={()=>setEditCustos(true)}>⚙️ Editar custos</button>
+            <button className="abt no-print" style={{padding:"10px 16px",alignSelf:"center"}} onClick={()=>onNavParametros&&onNavParametros()}>⚙️ Editar custos</button>
           </div>
 
-          {/* Tabela detalhada */}
+          {/* Tabela detalhada — período da base */}
           <div className="card" style={{marginBottom:20}}>
-            <div className="ct"><span className="ctd"/>Detalhamento da Perda Financeira</div>
+            <div className="ct"><span className="ctd"/>Detalhamento da Perda Financeira {(()=>{
+              const datas=timeline.map(e=>e.data).filter(Boolean).map(d=>{const p=d.split("/");return p.length===3?new Date(2000+parseInt(p[2]),parseInt(p[1])-1,parseInt(p[0])):null;}).filter(Boolean).sort((a,b)=>a-b);
+              if(!datas.length) return "";
+              const fmt=d=>`${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`;
+              return <span style={{fontWeight:400,textTransform:"none",letterSpacing:0,fontSize:10,color:C.muted}}> — Período: {fmt(datas[0])} a {fmt(datas[datas.length-1])}</span>;
+            })()}</div>
             <div className="tw">
               <table>
                 <thead><tr><th>Descricao</th><th style={{textAlign:"center"}}>Qtd.</th><th>Item</th><th style={{textAlign:"right"}}>Valor Un.</th><th style={{textAlign:"right"}}>Total Perda</th></tr></thead>
@@ -2371,9 +2374,14 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
       {tab==="multas"&&(
         <div>
           <div className="card" style={{marginBottom:16}}>
-            <div className="ct"><span className="ctd"/>■ Reclamacoes (EV=O)</div>
+            <div className="ct" style={{justifyContent:"space-between",display:"flex"}}>
+              <span style={{display:"flex",alignItems:"center",gap:8}}><span className="ctd"/>■ Reclamações (EV=O)</span>
+              <span style={{fontFamily:"'Inter',sans-serif",fontWeight:800,color:timeline.filter(e=>e.ev==="O").length>0?C.orange:C.muted,fontSize:15}}>
+                Qtd: {timeline.filter(e=>e.ev==="O").length}
+              </span>
+            </div>
             {timeline.filter(e=>e.ev==="O").length===0
-              ?<div style={{color:C.muted,fontSize:13,padding:"12px 0"}}>✓ Nao ha ocorrencias de reclamacoes de municipe (EV=O) para este operador no periodo.</div>
+              ?<div style={{color:C.muted,fontSize:13,padding:"12px 0"}}>✓ Não há ocorrências de reclamações de munícipe (EV=O) para este operador no período.</div>
               :<div className="tw"><table>
                 <thead><tr><th>Data</th><th>Descricao</th></tr></thead>
                 <tbody>{timeline.filter(e=>e.ev==="O").map((e,i)=><tr key={i}><td style={{color:C.muted,fontSize:12}}>{e.data}</td><td>{e.historico}</td></tr>)}</tbody>
@@ -2382,13 +2390,13 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
           </div>
           <div className="card">
             <div className="ct" style={{justifyContent:"space-between",display:"flex"}}>
-              <span style={{display:"flex",alignItems:"center",gap:8}}><span className="ctd"/>■ Autos de Infracao - Base de Multas</span>
+              <span style={{display:"flex",alignItems:"center",gap:8}}><span className="ctd"/>■ Autos de Infração - Base de Multas ({multasDet.length} auto{multasDet.length!==1?"s":""})</span>
               {multasVal>0&&<span style={{fontFamily:"'Inter',sans-serif",fontWeight:800,color:C.red,fontSize:15}}>Total: {fmtBRL(multasVal)}</span>}
             </div>
             {multasDet.length===0
               ?<div style={{color:C.muted,fontSize:13,padding:"12px 0"}}>✓ Nenhum auto de infracao registrado para este operador.</div>
               :<div className="tw"><table>
-                <thead><tr><th>Data da Infracao</th><th>Linha</th><th>Descricao</th><th>Enquadramento</th><th style={{textAlign:"right"}}>Valor (R$)</th></tr></thead>
+                <thead><tr><th>Data da Infração</th><th>Linha</th><th>Descricao</th><th>Enquadramento</th><th style={{textAlign:"right"}}>Valor (R$)</th></tr></thead>
                 <tbody>
                   {multasDet.map((m,i)=>(
                     <tr key={i}>
@@ -2433,70 +2441,101 @@ const FichaPage = ({ op, onBack, globalCustos, onSaveCustos }) => {
       )}
 
       {/* ══ MENTORIA ══ */}
-      {tab==="mentoria"&&(
-        <div>
-          {relatos.length===0&&(
-            <div className="card" style={{textAlign:"center",padding:"48px 0"}}>
-              <div style={{fontSize:40,marginBottom:10}}>💬</div>
-              <div style={{fontFamily:"'Inter',sans-serif",fontSize:16,fontWeight:700}}>{op.status==="aguardando"?"Operador ainda nao passou pela mentoria":"Nenhum relato registrado"}</div>
-              <div style={{color:C.muted,fontSize:13,marginTop:6}}>{op.status==="aguardando"?"Agende uma mentoria para iniciar o acompanhamento.":"Os relatos aparecerao aqui apos o preenchimento do formulario."}</div>
-            </div>
-          )}
-          {relatos.map((r,i)=>(
-            <div className="card" key={i} style={{marginBottom:16,borderLeft:`3px solid ${i===0?C.accent:i===relatos.length-1?C.green:C.gold}`}}>
-              <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14,flexWrap:"wrap"}}>
-                <div style={{fontFamily:"'Inter',sans-serif",fontSize:14,fontWeight:700,color:C.accent}}>Sessao {i+1}</div>
-                <div style={{fontSize:12,color:C.muted}}>📅 {r.data}</div>
-                {r.acompanhante!=="Sozinho"&&<div style={{fontSize:12,background:`${C.accent2}15`,border:`1px solid ${C.accent2}30`,borderRadius:6,padding:"2px 8px",color:C.accent2}}>👥 {r.acompanhante}</div>}
-                <div style={{marginLeft:"auto",display:"flex",gap:3,alignItems:"center"}}>
-                  {[1,2,3,4,5].map(s=><span key={s} style={{fontSize:15,color:s<=r.comprometimento?C.gold:"#2a3a4a"}}>★</span>)}
-                  <span style={{fontSize:12,color:C.muted,marginLeft:4}}>{r.comprometimento}/5</span>
+      {tab==="mentoria"&&(()=>{
+        const opSessions = (sessions||[]).filter(s=>s.re===op.re);
+        return (
+          <div>
+            {opSessions.length===0&&(
+              <div className="card" style={{textAlign:"center",padding:"48px 0"}}>
+                <div style={{fontSize:40,marginBottom:10}}>💬</div>
+                <div style={{fontFamily:"'Inter',sans-serif",fontSize:16,fontWeight:700}}>Operador ainda não passou pela mentoria</div>
+                <div style={{color:C.muted,fontSize:13,marginTop:6}}>Agende uma mentoria para iniciar o acompanhamento.</div>
+                <div style={{display:"flex",gap:10,justifyContent:"center",marginTop:16}}>
+                  <button className="abt" style={{padding:"10px 24px",fontSize:13,background:`${C.green}18`,borderColor:C.green,color:C.green}}
+                    onClick={()=>onNavMentoria&&onNavMentoria()}>💬 Registrar Mentoria</button>
+                  <button className="abt" style={{padding:"10px 24px",fontSize:13,background:`${C.accent}18`,borderColor:C.accent,color:C.accent}}
+                    onClick={()=>onNavAgenda&&onNavAgenda()}>📅 Agendar Mentoria</button>
                 </div>
               </div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
+            )}
+            {opSessions.map((r,i)=>(
+              <div className="card" key={r.id} style={{marginBottom:16,borderLeft:`3px solid ${i===0?C.accent:i===opSessions.length-1?C.green:C.gold}`}}>
+                <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14,flexWrap:"wrap"}}>
+                  <div style={{fontFamily:"'Inter',sans-serif",fontSize:14,fontWeight:700,color:C.accent}}>Sessão {i+1}</div>
+                  <div style={{fontSize:12,color:C.muted}}>📅 {r.data}</div>
+                  {r.acompanhante&&r.acompanhante!=="Sozinho"&&<div style={{fontSize:12,background:`${C.accent2}15`,border:`1px solid ${C.accent2}30`,borderRadius:6,padding:"2px 8px",color:C.accent2}}>👥 {r.tipoAcomp}: {r.acompanhante}</div>}
+                  <span className="pill" style={{color:({concluido:C.green,andamento:C.gold,pendente:C.red}[r.status])||C.muted,background:`${({concluido:C.green,andamento:C.gold,pendente:C.red}[r.status])||C.muted}18`}}>● {r.status==="concluido"?"Concluído":r.status==="andamento"?"Em andamento":"Pendente"}</span>
+                  <div style={{marginLeft:"auto",display:"flex",gap:3,alignItems:"center"}}>
+                    {[1,2,3,4,5].map(s=><span key={s} style={{fontSize:15,color:s<=r.comprometimento?C.gold:"#2a3a4a"}}>★</span>)}
+                    <span style={{fontSize:12,color:C.muted,marginLeft:4}}>{r.comprometimento}/5</span>
+                  </div>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
+                  <div style={{background:C.bg,borderRadius:10,padding:"12px 14px"}}>
+                    <div style={{fontSize:10,color:C.muted,marginBottom:4,textTransform:"uppercase",letterSpacing:.5}}>Causas identificadas</div>
+                    <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{(r.causas||[]).map(c=><span key={c} style={{fontSize:11,background:`${C.purple}18`,border:`1px solid ${C.purple}30`,borderRadius:6,padding:"2px 8px",color:C.purple}}>{c}</span>)}</div>
+                  </div>
+                  <div style={{background:C.bg,borderRadius:10,padding:"12px 14px"}}>
+                    <div style={{fontSize:10,color:C.muted,marginBottom:4,textTransform:"uppercase",letterSpacing:.5}}>Encaminhado para</div>
+                    <div style={{fontSize:13,fontWeight:600,color:r.setor&&r.setor!=="-"?C.accent:C.muted}}>{r.setor||"—"}{r.subsetor?` / ${r.subsetor}`:""}</div>
+                  </div>
+                </div>
                 <div style={{background:C.bg,borderRadius:10,padding:"12px 14px"}}>
-                  <div style={{fontSize:10,color:C.muted,marginBottom:4,textTransform:"uppercase",letterSpacing:.5}}>Causa identificada</div>
-                  <div style={{fontSize:13,lineHeight:1.6}}>{r.causa}</div>
+                  <div style={{fontSize:10,color:C.muted,marginBottom:4,textTransform:"uppercase",letterSpacing:.5}}>Relato da sessão</div>
+                  <div style={{fontSize:13,lineHeight:1.7}}>{r.relato}</div>
                 </div>
-                <div style={{background:C.bg,borderRadius:10,padding:"12px 14px"}}>
-                  <div style={{fontSize:10,color:C.muted,marginBottom:4,textTransform:"uppercase",letterSpacing:.5}}>Encaminhado para</div>
-                  <div style={{fontSize:13,fontWeight:600,color:r.setor==="-"?C.muted:C.accent}}>{r.setor}</div>
-                </div>
+                {r.denuncia&&<div style={{background:`${C.red}10`,border:`1px solid ${C.red}30`,borderRadius:8,padding:"10px 14px",fontSize:12,color:C.red,marginTop:10}}>⚠️ <strong>Denúncia registrada nesta sessão.</strong></div>}
               </div>
-              <div style={{background:C.bg,borderRadius:10,padding:"12px 14px"}}>
-                <div style={{fontSize:10,color:C.muted,marginBottom:4,textTransform:"uppercase",letterSpacing:.5}}>Relato da sessao</div>
-                <div style={{fontSize:13,lineHeight:1.7}}>{r.relato}</div>
+            ))}
+            {opSessions.length>0&&(
+              <div style={{textAlign:"center",marginTop:16}}>
+                <button className="abt" style={{padding:"10px 24px",fontSize:13,background:`${C.green}18`,borderColor:C.green,color:C.green}}
+                  onClick={()=>onNavMentoria&&onNavMentoria()}>+ Nova Sessão de Mentoria</button>
               </div>
-              {r.denuncia&&<div style={{background:`${C.red}10`,border:`1px solid ${C.red}30`,borderRadius:8,padding:"10px 14px",fontSize:12,color:C.red,marginTop:10}}>⚠️ <strong>Denuncia registrada nesta sessao.</strong></div>}
-            </div>
-          ))}
-        </div>
-      )}
+            )}
+          </div>
+        );
+      })()}
 
       {/* ══ TRATATIVAS ══ */}
-      {tab==="tratativas"&&(
-        <div>
-          {encamins.length===0&&(
-            <div className="card" style={{textAlign:"center",padding:"48px 0"}}>
-              <div style={{fontSize:40,marginBottom:10}}>🔁</div>
-              <div style={{fontFamily:"'Inter',sans-serif",fontSize:16,fontWeight:700}}>Nenhuma tratativa registrada</div>
-            </div>
-          )}
-          {encamins.map((e,i)=>{
-            const st={concluido:{label:"Concluido",color:C.green,bg:`${C.green}18`},andamento:{label:"Em andamento",color:C.gold,bg:`${C.gold}18`},pendente:{label:"Pendente",color:C.red,bg:`${C.red}18`}}[e.status];
-            return(<div className="enc-card" key={i}>
-              <div className="enc-header">
-                <div className="enc-icon" style={{background:`${e.cor}20`,border:`1px solid ${e.cor}30`}}>{e.icon}</div>
-                <div style={{flex:1}}><div className="enc-area">{e.area}</div><div className="enc-data">📅 {e.data}</div></div>
-                <span className="pill" style={{color:st.color,background:st.bg}}>● {st.label}</span>
+      {tab==="tratativas"&&(()=>{
+        const opTrat = (globalTratativas||[]).filter(t=>t.re===op.re);
+        const ST_TRAT={concluido:{label:"Concluído",color:C.green,bg:`${C.green}18`},andamento:{label:"Em andamento",color:C.gold,bg:`${C.gold}18`},pendente:{label:"Pendente",color:C.red,bg:`${C.red}18`}};
+        return(
+          <div>
+            {opTrat.length===0&&(
+              <div className="card" style={{textAlign:"center",padding:"48px 0"}}>
+                <div style={{fontSize:40,marginBottom:10}}>🔁</div>
+                <div style={{fontFamily:"'Inter',sans-serif",fontSize:16,fontWeight:700}}>Nenhuma tratativa registrada</div>
+                <div style={{color:C.muted,fontSize:13,marginTop:6}}>As tratativas aparecerão aqui após registro na tela de Tratativas.</div>
               </div>
-              <div className="enc-desc">📋 {e.descricao}</div>
-              {e.retorno&&<div className="enc-retorno"><div style={{fontSize:11,color:C.green,fontWeight:600,marginBottom:4,textTransform:"uppercase",letterSpacing:.5}}>✓ Retorno do setor</div><div style={{fontSize:13}}>{e.retorno}</div></div>}
-            </div>);
-          })}
-          <div style={{textAlign:"center",marginTop:16}}><button className="abt" style={{padding:"10px 24px",fontSize:13}}>+ Registrar Nova Tratativa</button></div>
-        </div>
-      )}
+            )}
+            {opTrat.map((t,i)=>{
+              const st=ST_TRAT[t.status]||ST_TRAT.pendente;
+              const pr=PRIOR_MAP[t.prioridade]||{label:"Normal",color:C.muted};
+              return(<div className="card" key={t.id} style={{marginBottom:10,borderLeft:`3px solid ${st.color}`}}>
+                <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:8,flexWrap:"wrap"}}>
+                  <span style={{fontSize:16}}>{AREA_ICONS[t.area]||"🔁"}</span>
+                  <span style={{fontWeight:700,fontSize:13}}>{t.area}{t.subarea?` / ${t.subarea}`:""}</span>
+                  <span style={{fontSize:11,color:C.muted}}>📅 {t.data}</span>
+                  {t.prazo&&<span style={{fontSize:11,color:C.muted}}>Prazo: {t.prazo}</span>}
+                  <span className="pill" style={{color:st.color,background:st.bg,marginLeft:"auto"}}>● {st.label}</span>
+                  <span className="pill" style={{color:pr.color,background:`${pr.color}18`}}>{pr.label}</span>
+                </div>
+                <div style={{fontSize:13,color:C.text,marginBottom:6}}>📋 {t.descricao}</div>
+                {t.retorno&&<div style={{background:C.bg,borderRadius:8,padding:"10px 14px",marginTop:6}}>
+                  <div style={{fontSize:11,color:C.green,fontWeight:600,marginBottom:4,textTransform:"uppercase",letterSpacing:.5}}>✓ Retorno do setor</div>
+                  <div style={{fontSize:13}}>{t.retorno}</div>
+                </div>}
+              </div>);
+            })}
+            <div style={{textAlign:"center",marginTop:16}}>
+              <button className="abt" style={{padding:"10px 24px",fontSize:13,background:`${C.green}18`,borderColor:C.green,color:C.green}}
+                onClick={()=>onNavTratativas&&onNavTratativas()}>+ Registrar Nova Tratativa</button>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Rodape */}
       <div style={{marginTop:24,padding:"12px 0",borderTop:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:11,color:C.muted}} className="no-print">
@@ -5533,7 +5572,7 @@ export default function App() {
             return <>
           {active==="dashboard"   && <DashboardPage data={filteredOps} isReal={isReal} onNav={setActive} agenda={filteredAgenda} tratativas={filteredTrat} sessions={sessions} onVerFicha={(op)=>{setSelectedOp(op);setActive("ficha");}}/>}
           {active==="operadores"  && <OperadoresPage operators={ops} onVerFicha={(op)=>{ setSelectedOp(op); setActive("ficha"); }}/>}
-          {active==="ficha"       && <FichaPage op={selectedOp} onBack={()=>setActive("operadores")} globalCustos={custos} onSaveCustos={setCust}/>}
+          {active==="ficha"       && <FichaPage op={selectedOp} onBack={()=>setActive("operadores")} globalCustos={custos} onSaveCustos={setCust} sessions={sessions} tratativas={filteredTrat} onNavMentoria={()=>setActive("mentoria")} onNavAgenda={()=>setActive("agenda")} onNavParametros={()=>setActive("parametros")} onNavTratativas={()=>setActive("tratativas")}/>}
           {active==="mentoria"    && <MentoriaPage operators={ops} sessions={sessions}
   onDelete={id=>{
     setSess(prev=>prev.filter(s=>s.id!==id));
