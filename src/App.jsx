@@ -1582,21 +1582,34 @@ const OperadoresPage = ({ operators, onVerFicha }) => {
   const handleExport = async () => {
     try {
       const xlsxLib = await loadXLSX();
-      const rows = lista.map(op => ({
-        "RE": op.re,
-        "Nome": op.nome,
-        "Função": op.funcao,
-        "Garagem": op.garagem,
-        "Admissão": op.admissao,
-        "Faltas": op.faltas||0,
-        "Multas": op.multas||0,
-        "Atestados": op.atestados||0,
-        "Suspensões": op.suspensoes||0,
-        "Acidentes": op.acidentes||0,
-        "Status": op.status,
-        "Resultado": op.resultado||"—",
-        "Data Mentoria": op.dataMentoria||"—",
-      }));
+      const rows = lista.map(op => {
+        const totalEv = (op.faltas||0)+(op.multas||0)+(op.acidentes||0)+(op.atestados||0)+(op.suspensoes||0);
+        const tl = op.timeline||[];
+        const mesesSet = new Set();
+        tl.forEach(ev=>{
+          if(ev.ev==="n") return;
+          const p=ev.data?.match(/(\d{2})\/(\d{2})\/(\d{2,4})/);
+          if(p) mesesSet.add(p[2]+"/"+p[3]);
+        });
+        const mediaEv = mesesSet.size>0 ? Math.round(totalEv/mesesSet.size*10)/10 : 0;
+        return {
+          "RE": op.re,
+          "Nome": op.nome,
+          "Função": op.funcao,
+          "Garagem": op.garagem,
+          "Admissão": op.admissao,
+          "Faltas": op.faltas||0,
+          "Multas": op.multas||0,
+          "Atestados": op.atestados||0,
+          "Suspensões": op.suspensoes||0,
+          "Acidentes": op.acidentes||0,
+          "Total Eventos": totalEv,
+          "Média Ev/Mês": mediaEv,
+          "Status": op.status,
+          "Resultado": op.resultado||"—",
+          "Data Mentoria": op.dataMentoria||"—",
+        };
+      });
       const ws = xlsxLib.utils.json_to_sheet(rows);
       const wb = xlsxLib.utils.book_new();
       xlsxLib.utils.book_append_sheet(wb, ws, "Operadores");
@@ -1661,6 +1674,15 @@ const OperadoresPage = ({ operators, onVerFicha }) => {
         const ac  = avatarColor(op.re);
         const stl = STATUS_LABEL[op.status];
         const res = op.resultado ? RESULTADO_LABEL[op.resultado] : null;
+        const totalEv = (op.faltas||0)+(op.multas||0)+(op.acidentes||0)+(op.atestados||0)+(op.suspensoes||0);
+        const tl = op.timeline||[];
+        const mesesSet = new Set();
+        tl.forEach(ev=>{
+          if(ev.ev==="n") return;
+          const p=ev.data?.match(/(\d{2})\/(\d{2})\/(\d{2,4})/);
+          if(p) mesesSet.add(p[2]+"/"+p[3]);
+        });
+        const mediaEv = mesesSet.size>0 ? Math.round(totalEv/mesesSet.size*10)/10 : 0;
         return (
           <div className="op-card" key={op.re+i} onClick={()=>onVerFicha && onVerFicha(op)}>
             <div className="op-avatar" style={{ background:`${ac}20`,color:ac,border:`1px solid ${ac}30` }}>{initials(op.nome)}</div>
@@ -1674,7 +1696,9 @@ const OperadoresPage = ({ operators, onVerFicha }) => {
             <div className="op-stats">
               {[{v:op.faltas,l:"Faltas",c:op.faltas>=10?C.red:op.faltas>=5?C.orange:C.muted},
                 {v:op.multas,l:"Multas",c:op.multas>=5?C.red:op.multas>=3?C.orange:C.muted},
-                {v:op.acidentes,l:"Acid.",c:op.acidentes>=2?C.red:op.acidentes>=1?C.orange:C.muted}]
+                {v:op.acidentes,l:"Acid.",c:op.acidentes>=2?C.red:op.acidentes>=1?C.orange:C.muted},
+                {v:totalEv,l:"Total Ev",c:totalEv>=15?C.red:totalEv>=8?C.orange:C.muted},
+                {v:mediaEv,l:"Média/Mês",c:mediaEv>=5?C.red:mediaEv>=3?C.orange:C.muted}]
                .map(s=>(
                 <div className="op-stat" key={s.l}>
                   <div className="op-stat-v" style={{ color:s.c }}>{s.v}</div>
