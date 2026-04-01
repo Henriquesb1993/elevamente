@@ -1582,6 +1582,14 @@ const OperadoresPage = ({ operators, onVerFicha }) => {
   const handleExport = async () => {
     try {
       const xlsxLib = await loadXLSX();
+      const pDtExp = (s) => {
+        if(!s) return null;
+        let p=s.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+        if(p) return new Date(+p[3],+p[2]-1,+p[1]);
+        p=s.match(/(\d{2})\/(\d{2})\/(\d{2})/);
+        if(p){const y=+p[3]<50?2000+ +p[3]:1900+ +p[3]; return new Date(y,+p[2]-1,+p[1]);}
+        return null;
+      };
       const rows = lista.map(op => {
         const totalEv = (op.faltas||0)+(op.multas||0)+(op.acidentes||0)+(op.atestados||0)+(op.suspensoes||0);
         const tl = op.timeline||[];
@@ -1592,6 +1600,20 @@ const OperadoresPage = ({ operators, onVerFicha }) => {
           if(p) mesesSet.add(p[2]+"/"+p[3]);
         });
         const mediaEv = mesesSet.size>0 ? Math.round(totalEv/mesesSet.size*10)/10 : 0;
+        let evPos = 0, mesesPos = new Set();
+        const mentDt = pDtExp(op.dataMentoria);
+        if(mentDt){
+          tl.forEach(ev=>{
+            if(ev.ev==="n") return;
+            const evDt=pDtExp(ev.data);
+            if(evDt && evDt>=mentDt){
+              evPos++;
+              const p=ev.data?.match(/(\d{2})\/(\d{2})\/(\d{2,4})/);
+              if(p) mesesPos.add(p[2]+"/"+p[3]);
+            }
+          });
+        }
+        const mediaPos = mesesPos.size>0 ? Math.round(evPos/mesesPos.size*10)/10 : 0;
         return {
           "RE": op.re,
           "Nome": op.nome,
@@ -1605,9 +1627,11 @@ const OperadoresPage = ({ operators, onVerFicha }) => {
           "Acidentes": op.acidentes||0,
           "Total Eventos": totalEv,
           "Média Ev/Mês": mediaEv,
+          "Data Mentoria": op.dataMentoria||"—",
+          "Ev Pós Mentoria": mentDt ? evPos : "—",
+          "Média Pós/Mês": mentDt ? mediaPos : "—",
           "Status": op.status,
           "Resultado": op.resultado||"—",
-          "Data Mentoria": op.dataMentoria||"—",
         };
       });
       const ws = xlsxLib.utils.json_to_sheet(rows);
@@ -1683,6 +1707,30 @@ const OperadoresPage = ({ operators, onVerFicha }) => {
           if(p) mesesSet.add(p[2]+"/"+p[3]);
         });
         const mediaEv = mesesSet.size>0 ? Math.round(totalEv/mesesSet.size*10)/10 : 0;
+        // Eventos pós mentoria
+        let evPos = 0, mesesPos = new Set();
+        const pDtCard = (s) => {
+          if(!s) return null;
+          let p=s.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+          if(p) return new Date(+p[3],+p[2]-1,+p[1]);
+          p=s.match(/(\d{2})\/(\d{2})\/(\d{2})/);
+          if(p){const y=+p[3]<50?2000+ +p[3]:1900+ +p[3]; return new Date(y,+p[2]-1,+p[1]);}
+          return null;
+        };
+        const mentDt = pDtCard(op.dataMentoria);
+        if(mentDt){
+          tl.forEach(ev=>{
+            if(ev.ev==="n") return;
+            const evDt=pDtCard(ev.data);
+            if(evDt && evDt>=mentDt){
+              evPos++;
+              const p=ev.data?.match(/(\d{2})\/(\d{2})\/(\d{2,4})/);
+              if(p) mesesPos.add(p[2]+"/"+p[3]);
+            }
+          });
+        }
+        const mediaPos = mesesPos.size>0 ? Math.round(evPos/mesesPos.size*10)/10 : 0;
+        const hasMent = !!mentDt;
         return (
           <div className="op-card" key={op.re+i} onClick={()=>onVerFicha && onVerFicha(op)}>
             <div className="op-avatar" style={{ background:`${ac}20`,color:ac,border:`1px solid ${ac}30` }}>{initials(op.nome)}</div>
@@ -1698,7 +1746,9 @@ const OperadoresPage = ({ operators, onVerFicha }) => {
                 {v:op.multas,l:"Multas",c:op.multas>=5?C.red:op.multas>=3?C.orange:C.muted},
                 {v:op.acidentes,l:"Acid.",c:op.acidentes>=2?C.red:op.acidentes>=1?C.orange:C.muted},
                 {v:totalEv,l:"Total Ev",c:totalEv>=15?C.red:totalEv>=8?C.orange:C.muted},
-                {v:mediaEv,l:"Média/Mês",c:mediaEv>=5?C.red:mediaEv>=3?C.orange:C.muted}]
+                {v:mediaEv,l:"Média/Mês",c:mediaEv>=5?C.red:mediaEv>=3?C.orange:C.muted},
+                {v:hasMent?evPos:"—",l:"Ev Pós",c:!hasMent?C.muted:evPos===0?C.green:evPos>=3?C.red:C.orange},
+                {v:hasMent?mediaPos:"—",l:"Média Pós",c:!hasMent?C.muted:mediaPos===0?C.green:mediaPos>=3?C.red:C.orange}]
                .map(s=>(
                 <div className="op-stat" key={s.l}>
                   <div className="op-stat-v" style={{ color:s.c }}>{s.v}</div>
