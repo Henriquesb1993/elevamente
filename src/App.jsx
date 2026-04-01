@@ -1134,17 +1134,18 @@ const DashboardPage = ({ data, isReal, onNav, agenda, tratativas, sessions, onVe
               if (mp) mentoriaMonth = mp.mmyyyy;
             }
 
-            // Build "Antes vs Depois" data for selected operator
+            // Build "Antes vs Depois" data
             let antesDepoisData = null;
-            if (selectedOp && selectedOp.timeline?.length) {
-              const mp = parseDate(selectedOp.dataMentoria);
-              if (mp) {
+            const buildAntesDepois = (opsList) => {
+              const antes = {}, depois = {};
+              const antesTypes = new Set(), depoisTypes = new Set();
+              let antesTotal = 0, depoisTotal = 0;
+              let antesMonths = new Set(), depoisMonths = new Set();
+              opsList.forEach(op => {
+                const mp = parseDate(op.dataMentoria);
+                if (!mp) return;
                 const mentDate = mp.date;
-                const antes = {}, depois = {};
-                const antesTypes = new Set(), depoisTypes = new Set();
-                let antesTotal = 0, depoisTotal = 0;
-                let antesMonths = new Set(), depoisMonths = new Set();
-                selectedOp.timeline.forEach(ev => {
+                (op.timeline||[]).forEach(ev => {
                   if (ev.ev === "n") return;
                   const dp = parseDate(ev.data);
                   if (!dp) return;
@@ -1160,15 +1161,24 @@ const DashboardPage = ({ data, isReal, onNav, agenda, tratativas, sessions, onVe
                     depoisMonths.add(dp.mmyyyy);
                   }
                 });
-                const allTypes = [...new Set([...antesTypes, ...depoisTypes])].sort();
-                antesDepoisData = {
-                  allTypes,
-                  bars: [
-                    { periodo: "Antes", ...antes, total: antesTotal, meses: antesMonths.size, media: antesMonths.size ? Math.round(antesTotal/antesMonths.size*10)/10 : 0 },
-                    { periodo: "Depois", ...depois, total: depoisTotal, meses: depoisMonths.size, media: depoisMonths.size ? Math.round(depoisTotal/depoisMonths.size*10)/10 : 0 },
-                  ],
-                };
-              }
+              });
+              if (antesTotal === 0 && depoisTotal === 0) return null;
+              const allTypes = [...new Set([...antesTypes, ...depoisTypes])].sort();
+              return {
+                allTypes,
+                bars: [
+                  { periodo: "Antes", ...antes, total: antesTotal, meses: antesMonths.size, media: antesMonths.size ? Math.round(antesTotal/antesMonths.size*10)/10 : 0 },
+                  { periodo: "Depois", ...depois, total: depoisTotal, meses: depoisMonths.size, media: depoisMonths.size ? Math.round(depoisTotal/depoisMonths.size*10)/10 : 0 },
+                ],
+              };
+            };
+            if (selectedOp) {
+              // Single operator
+              if (selectedOp.dataMentoria) antesDepoisData = buildAntesDepois([selectedOp]);
+            } else {
+              // All operators who had mentoria (have dataMentoria)
+              const mentorados = operators.filter(o => o.dataMentoria && o.dataMentoria !== "–");
+              if (mentorados.length > 0) antesDepoisData = buildAntesDepois(mentorados);
             }
 
             // Custom tooltip showing all EV types with counts
@@ -1231,21 +1241,24 @@ const DashboardPage = ({ data, isReal, onNav, agenda, tratativas, sessions, onVe
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              selectedOp && antesDepoisData ? (
-                <ResponsiveContainer width="100%" height={260}>
-                  <BarChart data={antesDepoisData.bars} barSize={40}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false}/>
-                    <XAxis dataKey="periodo" tick={{ fill:C.muted,fontSize:12,fontWeight:700 }} axisLine={false} tickLine={false}/>
-                    <YAxis tick={{ fill:C.muted,fontSize:11 }} axisLine={false} tickLine={false}/>
-                    <Tooltip content={<ADTooltip/>}/>
-                    {antesDepoisData.allTypes.map((ev,i) => (
-                      <Bar key={ev} dataKey={ev} fill={evColor(ev,i)} radius={[2,2,0,0]} name={EV_LABELS[ev]||ev} stackId="ad"/>
-                    ))}
-                  </BarChart>
-                </ResponsiveContainer>
+              antesDepoisData ? (
+                <div>
+                  {!selectedOp && <div style={{textAlign:"center",fontSize:11,color:C.muted,marginBottom:4}}>Todos os mentorados — média ev/mês: Antes {antesDepoisData.bars[0].media} · Depois {antesDepoisData.bars[1].media} {antesDepoisData.bars[1].media<antesDepoisData.bars[0].media?<span style={{color:C.green,fontWeight:700}}>↓ Melhorou</span>:antesDepoisData.bars[1].media>antesDepoisData.bars[0].media?<span style={{color:C.red,fontWeight:700}}>↑ Piorou</span>:<span style={{color:C.gold,fontWeight:700}}>= Igual</span>}</div>}
+                  <ResponsiveContainer width="100%" height={240}>
+                    <BarChart data={antesDepoisData.bars} barSize={50}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false}/>
+                      <XAxis dataKey="periodo" tick={{ fill:C.muted,fontSize:12,fontWeight:700 }} axisLine={false} tickLine={false}/>
+                      <YAxis tick={{ fill:C.muted,fontSize:11 }} axisLine={false} tickLine={false}/>
+                      <Tooltip content={<ADTooltip/>}/>
+                      {antesDepoisData.allTypes.map((ev,i) => (
+                        <Bar key={ev} dataKey={ev} fill={evColor(ev,i)} radius={[2,2,0,0]} name={EV_LABELS[ev]||ev} stackId="ad"/>
+                      ))}
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
               ) : (
                 <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:260,color:C.muted,fontSize:13}}>
-                  {selectedOp ? "Operador sem data de mentoria para comparar Antes vs Depois" : "Clique em um operador na tabela abaixo para ver Antes vs Depois da mentoria"}
+                  Nenhum operador com data de mentoria para comparar
                 </div>
               )
             );
