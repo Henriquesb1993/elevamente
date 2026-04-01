@@ -300,13 +300,26 @@ function processExcel(workbook) {
     if (pa.includes("respons")) acidCount[re] = (acidCount[re]||0)+1;
   });
 
-  // ── Mentoria dates from LISTA PRESENÇA ─────────────────────────────────
+  // ── Mentoria dates from QUERY_PRONTUARIO (EV="n") ──────────────────────
   const mentoriaDate = {};
+  prontuario.forEach(row => {
+    const reCol = findCol(row,"NOREG","RE","REGISTRO","CHAPA","MATRICULA");
+    const evCol = findCol(row,"EV","EVENTO","COD","CODIGO");
+    const dtCol = findCol(row,"DATA","DT","DATE");
+    const re = reCol ? String(row[reCol]).trim() : null;
+    const ev = evCol ? String(row[evCol]).trim() : null;
+    if (!re || ev !== "n") return;
+    const dt = dtCol ? toDateStr(row[dtCol]) : null;
+    if (!dt) return;
+    // Keep earliest mentoria date per operator
+    if (!mentoriaDate[re] || dt < mentoriaDate[re]) mentoriaDate[re] = dt;
+  });
+  // Fallback: also check LISTA PRESENÇA
   presenca.forEach(row => {
     const reCol = findCol(row,"RE","REGISTRO","NOREG","MATRICULA");
     const dtCol = findCol(row,"DATA","DT","DATE");
     const re = reCol ? String(row[reCol]).trim() : null;
-    if (!re || mentoriaDate[re]) return; // first mentoria date
+    if (!re || mentoriaDate[re]) return;
     mentoriaDate[re] = dtCol ? toDateStr(row[dtCol]) : "–";
   });
 
@@ -346,10 +359,15 @@ function processExcel(workbook) {
     const acid   = acidCount[re]||0;
     const hasMen = !!mentoriaDate[re];
     const comp   = formData[re]?.comprometimento || null;
+    // Check if operator has EV="n" in QUERY_PRONTUARIO
+    const hasEvN = (ec["n"]||0) > 0;
 
-    // Determine resultado based on comprometimento + trend
+    // Determine resultado
     let resultado = null;
-    if (hasMen) {
+    if (hasEvN) {
+      // Operador realizou mentoria (EV="n" no prontuário)
+      resultado = "realizou";
+    } else if (hasMen) {
       if (comp !== null) {
         resultado = comp >= 4 ? "melhora" : comp <= 2 ? "piora" : "andamento";
       } else {
@@ -371,14 +389,24 @@ function processExcel(workbook) {
 
   // ── KPIs ────────────────────────────────────────────────────────────────
   const total          = operators.length;
-  const emMentoria     = operators.filter(o=>o.status==="mentoria").length;
+  // Qtd mentorado = REs únicos com EV="n" no QUERY_PRONTUARIO
+  const resMentorados  = new Set();
+  prontuario.forEach(row => {
+    const reCol = findCol(row,"NOREG","RE","REGISTRO","CHAPA","MATRICULA");
+    const evCol = findCol(row,"EV","EVENTO","COD","CODIGO");
+    const re = reCol ? String(row[reCol]).trim() : null;
+    const ev = evCol ? String(row[evCol]).trim() : null;
+    if (re && ev === "n") resMentorados.add(re);
+  });
+  const emMentoria     = resMentorados.size;
   const melhoraram     = operators.filter(o=>o.resultado==="melhora").length;
   const pioraram       = operators.filter(o=>o.resultado==="piora").length;
   const aguardando     = operators.filter(o=>o.status==="aguardando").length;
   const taxaMelhora    = emMentoria>0 ? Math.round((melhoraram/emMentoria)*100) : 0;
 
-  // ── Events by month ─────────────────────────────────────────────────────
+  // ── Events by month (all EV types from QUERY_PRONTUARIO) ────────────────
   const evByMonth = {};
+  const allEvTypes = new Set();
   prontuario.forEach(row => {
     const dtCol = findCol(row,"DATA-MES","DATAMES","DATA","DT");
     const evCol = findCol(row,"EV","EVENTO");
@@ -388,31 +416,32 @@ function processExcel(workbook) {
     // Normalize date to YYYY-MM regardless of format
     let mes = "";
     if(/^\d{4}-\d{2}/.test(dt)) {
-      mes = dt.substring(0,7); // already YYYY-MM
+      mes = dt.substring(0,7);
     } else if(/^\d{2}\/\d{2}\/\d{4}/.test(dt)) {
-      mes = dt.substring(6,10)+"-"+dt.substring(3,5); // dd/mm/yyyy -> YYYY-MM
+      mes = dt.substring(6,10)+"-"+dt.substring(3,5);
     } else if(/^\d{2}\/\d{2}\/\d{2}/.test(dt)) {
-      mes = "20"+dt.substring(6,8)+"-"+dt.substring(3,5); // dd/mm/yy -> YYYY-MM
+      mes = "20"+dt.substring(6,8)+"-"+dt.substring(3,5);
+    } else if(/^\d{5}/.test(dt)) {
+      // Excel serial date
+      const d = new Date((Number(dt) - 25569) * 86400000);
+      if (!isNaN(d)) mes = d.toISOString().substring(0,7);
     } else {
       mes = dt.substring(0,7);
     }
     if(!mes||mes.length<7) return;
-    if (!evByMonth[mes]) evByMonth[mes] = { mes, faltas:0, multas:0, acidentes:0, mentorias:0 };
-    if (ev==="F") evByMonth[mes].faltas++;
-    if (ev==="M") evByMonth[mes].multas++;
-    if (ev==="+") evByMonth[mes].mentorias++;
+    if (!evByMonth[mes]) evByMonth[mes] = { mes };
+    evByMonth[mes][ev] = (evByMonth[mes][ev] || 0) + 1;
+    allEvTypes.add(ev);
   });
-  acidentes.forEach(row => {
-    const dtCol = findCol(row,"DATA","DT");
-    const dt = dtCol ? toDateStr(row[dtCol]).substring(0,7) : "";
-    if (!dt) return;
-    if (!evByMonth[dt]) evByMonth[dt] = { mes:dt, faltas:0, multas:0, acidentes:0, mentorias:0 };
-    evByMonth[dt].acidentes++;
-  });
+  // Sort EV types for consistent chart order
+  const evTypesSorted = [...allEvTypes].sort();
   const eventosMes = Object.values(evByMonth)
     .sort((a,b)=>a.mes.localeCompare(b.mes))
-    .slice(-6)
-    .map(e=>({ ...e, mes: e.mes.substring(5,7)+"/"+e.mes.substring(2,4) }));
+    .map(e => {
+      let total = 0;
+      evTypesSorted.forEach(t => { total += (e[t] || 0); });
+      return { ...e, total, mes: e.mes.substring(5,7)+"/"+e.mes.substring(0,4) };
+    });
 
   // ── Causas (from formulário se disponível) ──────────────────────────────
   const causasMap = {};
@@ -441,7 +470,7 @@ function processExcel(workbook) {
   console.log("[Elevamente] Formulario rows:", formulario.length);
 
   return { operators, kpis:{ total, emMentoria, melhoraram, pioraram, aguardando, taxaMelhora },
-           eventosMes, causas, sheetSummary };
+           eventosMes, evTypesSorted, causas, sheetSummary };
 }
 
 // ─── STATIC MOCK (used before upload) ───────────────────────────────────────
@@ -449,6 +478,7 @@ const MOCK = {
   operators: [],
   kpis:{ total:0, emMentoria:0, melhoraram:0, pioraram:0, aguardando:0, taxaMelhora:0 },
   eventosMes:[],
+  evTypesSorted:[],
   causas:[],
   sheetSummary:[],
 };
@@ -865,13 +895,14 @@ const Ring = ({ value, size=116 }) => {
 };
 
 const STATUS_LABEL = {
-  mentoria:   { label:"Em Mentoria", color:C.accent,  bg:`${C.accent}18` },
+  mentoria:   { label:"Qtd mentorado", color:C.accent,  bg:`${C.accent}18` },
   aguardando: { label:"Aguardando",  color:C.orange,  bg:`${C.orange}18` },
 };
 const RESULTADO_LABEL = {
-  melhora:   { label:"Melhora",      color:C.green, bg:`${C.green}18`,  icon:"↑" },
-  piora:     { label:"Piora",        color:C.red,   bg:`${C.red}18`,    icon:"↓" },
-  andamento: { label:"Em avaliação", color:C.gold,  bg:`${C.gold}18`,   icon:"→" },
+  melhora:   { label:"Melhora",            color:C.green,  bg:`${C.green}18`,  icon:"↑" },
+  piora:     { label:"Piora",              color:C.red,    bg:`${C.red}18`,    icon:"↓" },
+  andamento: { label:"Em avaliação",       color:C.gold,   bg:`${C.gold}18`,   icon:"→" },
+  realizou:  { label:"Realizou mentoria",  color:C.accent2,bg:`${C.accent2}18`,icon:"✔" },
 };
 
 const NAV = [
@@ -889,7 +920,7 @@ const NAV = [
 
 // ─── DASHBOARD ───────────────────────────────────────────────────────────────
 const DashboardPage = ({ data, isReal, onNav, agenda, tratativas, sessions, onVerFicha }) => {
-  const { kpis, eventosMes, causas, operators } = data;
+  const { kpis, eventosMes, evTypesSorted, causas, operators } = data;
   const [chartTab, setChartTab] = useState("eventos");
   const [selectedOp, setSelectedOp] = useState(null);
   const [sortCol, setSortCol] = useState(null); // column key
@@ -898,11 +929,11 @@ const DashboardPage = ({ data, isReal, onNav, agenda, tratativas, sessions, onVe
 
   const kpiCards = [
     { icon:"👥", value:kpis.total,        label:"Total Operadores",  color:C.accent,  delta:`base ${isReal?"real":"mock"}`,      up:null,  nav:"operadores" },
-    { icon:"🎯", value:kpis.emMentoria,   label:"Em Mentoria",       color:C.accent2, delta:`de ${kpis.total} totais`,            up:null,  nav:"mentoria"   },
-    { icon:"📈", value:kpis.melhoraram,   label:"Melhoraram",        color:C.green,   delta:`de ${kpis.emMentoria} em mentoria`, up:true,  nav:"_melhoraram" },
-    { icon:"📉", value:kpis.pioraram,     label:"Pioraram",          color:C.red,     delta:`de ${kpis.emMentoria} em mentoria`, up:false, nav:"_pioraram"   },
+    { icon:"🎯", value:kpis.emMentoria,   label:"Qtd mentorado",     color:C.accent2, delta:`de ${kpis.total} totais`,            up:null,  nav:"mentoria"   },
+    { icon:"📈", value:kpis.melhoraram,   label:"Melhoraram",        color:C.green,   delta:`de ${kpis.emMentoria} mentorados`, up:true,  nav:"_melhoraram" },
+    { icon:"📉", value:kpis.pioraram,     label:"Pioraram",          color:C.red,     delta:`de ${kpis.emMentoria} mentorados`, up:false, nav:"_pioraram"   },
     { icon:"⏳", value:kpis.aguardando,   label:"Aguardam Mentoria", color:C.orange,  delta:`${kpis.total} − ${kpis.emMentoria} = ${kpis.aguardando}`, up:null, nav:"_aguardando" },
-    { icon:"✅", value:`${kpis.taxaMelhora}%`, label:"Taxa de Melhora", color:C.gold, delta:`${kpis.melhoraram} de ${kpis.emMentoria} pós mentoria`, up:kpis.taxaMelhora>=50, nav:null },
+    { icon:"✅", value:`${kpis.taxaMelhora}%`, label:"Taxa de Melhora", color:C.gold, delta:`${kpis.melhoraram} de ${kpis.emMentoria} mentorados`, up:kpis.taxaMelhora>=50, nav:null },
   ];
 
   // Listas filtradas para cards clicáveis
@@ -1028,38 +1059,80 @@ const DashboardPage = ({ data, isReal, onNav, agenda, tratativas, sessions, onVe
             ))}
           </div>
           {(()=>{
-            const evData = (selectedOp
-              ? eventosMes.map(m=>({...m, mes:m.mes})) // TODO: filter per operator when data supports it
-              : eventosMes
-            ).map(m=>({...m, total:(m.faltas||0)+(m.multas||0)+(m.acidentes||0)+(m.mentorias||0)}));
+            // If operator selected, build per-month data from their timeline
+            let evData = eventosMes;
+            if (selectedOp && selectedOp.timeline?.length) {
+              const byMonth = {};
+              const opEvTypes = new Set();
+              selectedOp.timeline.forEach(ev => {
+                const dp = ev.data?.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+                if (!dp) return;
+                const mes = dp[2]+"/"+dp[3]; // MM/YYYY
+                if (!byMonth[mes]) byMonth[mes] = { mes, _sort: dp[3]+"-"+dp[2] };
+                byMonth[mes][ev.ev] = (byMonth[mes][ev.ev]||0) + 1;
+                opEvTypes.add(ev.ev);
+              });
+              evData = Object.values(byMonth)
+                .sort((a,b) => a._sort.localeCompare(b._sort))
+                .map(m => {
+                  let total = 0;
+                  opEvTypes.forEach(t => { total += (m[t]||0); });
+                  return { ...m, total };
+                });
+            }
+            // Palette for EV types not in EV_COLOR
+            const fallbackColors = ["#6366f1","#8b5cf6","#ec4899","#14b8a6","#f59e0b","#64748b","#0ea5e9","#84cc16","#e11d48","#a855f7"];
+            const evColor = (ev,i) => EV_COLOR[ev] || fallbackColors[i % fallbackColors.length];
+            // Custom tooltip showing all EV types
+            const EvTooltip = ({ active, payload, label }) => {
+              if (!active || !payload?.length) return null;
+              const row = payload[0]?.payload || {};
+              return (
+                <div className="ctt" style={{minWidth:140}}>
+                  <div className="lb" style={{marginBottom:6,fontWeight:700}}>{label}</div>
+                  {evTypesSorted.filter(ev => (row[ev]||0) > 0).map((ev,i) => (
+                    <div className="rw2" key={ev} style={{display:"flex",alignItems:"center",gap:6,fontSize:12,padding:"1px 0"}}>
+                      <span style={{fontFamily:"monospace",fontWeight:700,color:evColor(ev,i),background:`${evColor(ev,i)}18`,padding:"1px 5px",borderRadius:3,fontSize:11}}>{ev}</span>
+                      <span style={{color:C.muted,flex:1}}>{EV_LABELS[ev]||ev}</span>
+                      <strong style={{color:evColor(ev,i)}}>{row[ev]}</strong>
+                    </div>
+                  ))}
+                  <div style={{borderTop:`1px solid ${C.border}`,marginTop:4,paddingTop:4,fontWeight:700,fontSize:12,textAlign:"right"}}>Total: {row.total||0}</div>
+                </div>
+              );
+            };
             return chartTab==="eventos" ? (
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={evData} barSize={9}>
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={evData} barSize={evData.length>12?7:9}>
                   <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false}/>
-                  <XAxis dataKey="mes" tick={{ fill:C.muted,fontSize:11 }} axisLine={false} tickLine={false}/>
+                  <XAxis dataKey="mes" tick={{ fill:C.muted,fontSize:10 }} axisLine={false} tickLine={false} interval={evData.length>12?1:0} angle={evData.length>12?-45:0} textAnchor={evData.length>12?"end":"middle"} height={evData.length>12?50:30}/>
                   <YAxis tick={{ fill:C.muted,fontSize:11 }} axisLine={false} tickLine={false}/>
-                  <Tooltip content={<CT/>}/>
-                  <Bar dataKey="faltas"    fill={C.red}    radius={[4,4,0,0]} name="Faltas" stackId="ev"/>
-                  <Bar dataKey="multas"    fill={C.orange} radius={[4,4,0,0]} name="Multas" stackId="ev"/>
-                  <Bar dataKey="acidentes" fill={C.purple} radius={[4,4,0,0]} name="Acidentes" stackId="ev"/>
-                  <Bar dataKey="mentorias" fill={C.green}  radius={[4,4,0,0]} name="Mentorias"/>
+                  <Tooltip content={<EvTooltip/>}/>
+                  {evTypesSorted.map((ev,i) => (
+                    <Bar key={ev} dataKey={ev} fill={evColor(ev,i)} radius={[2,2,0,0]} name={EV_LABELS[ev]||ev} stackId="ev"/>
+                  ))}
                   <Line type="monotone" dataKey="total" stroke={C.accent} strokeWidth={2} strokeDasharray="5 3" dot={false} name="Total"/>
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <ResponsiveContainer width="100%" height={220}>
+              <ResponsiveContainer width="100%" height={260}>
                 <AreaChart data={evData}>
                   <defs>
-                    <linearGradient id="gA" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={C.red} stopOpacity={.3}/><stop offset="95%" stopColor={C.red} stopOpacity={0}/></linearGradient>
-                    <linearGradient id="gB" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={C.green} stopOpacity={.3}/><stop offset="95%" stopColor={C.green} stopOpacity={0}/></linearGradient>
+                    {evTypesSorted.map((ev,i) => (
+                      <linearGradient key={ev} id={`gEv${ev}`} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={evColor(ev,i)} stopOpacity={.3}/>
+                        <stop offset="95%" stopColor={evColor(ev,i)} stopOpacity={0}/>
+                      </linearGradient>
+                    ))}
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false}/>
-                  <XAxis dataKey="mes" tick={{ fill:C.muted,fontSize:11 }} axisLine={false} tickLine={false}/>
+                  <XAxis dataKey="mes" tick={{ fill:C.muted,fontSize:10 }} axisLine={false} tickLine={false} interval={evData.length>12?1:0} angle={evData.length>12?-45:0} textAnchor={evData.length>12?"end":"middle"} height={evData.length>12?50:30}/>
                   <YAxis tick={{ fill:C.muted,fontSize:11 }} axisLine={false} tickLine={false}/>
-                  <Tooltip content={<CT/>}/>
-                  <Area dataKey="faltas"    fill="url(#gA)" stroke={C.red}   strokeWidth={2} name="Faltas"/>
-                  <Area dataKey="mentorias" fill="url(#gB)" stroke={C.green} strokeWidth={2} name="Mentorias"/>
-                  <Line type="monotone" dataKey="total" stroke={C.accent} strokeWidth={2} strokeDasharray="5 3" dot={false} name="Tendência"/>
+                  <Tooltip content={<EvTooltip/>}/>
+                  {evTypesSorted.map((ev,i) => (
+                    <Area key={ev} dataKey={ev} fill={`url(#gEv${ev})`} stroke={evColor(ev,i)} strokeWidth={2} name={EV_LABELS[ev]||ev}/>
+                  ))}
+                  <Line type="monotone" dataKey="total" stroke={C.accent} strokeWidth={2} strokeDasharray="5 3" dot={false} name="Total"/>
                 </AreaChart>
               </ResponsiveContainer>
             );
@@ -1101,15 +1174,47 @@ const DashboardPage = ({ data, isReal, onNav, agenda, tratativas, sessions, onVe
             <table>
               <thead><tr>
                 <th>#</th>
-                {[{k:"re",l:"RE"},{k:"nome",l:"Operador"},{k:"faltas",l:"Faltas"},{k:"atestados",l:"Atestados"},{k:"multas",l:"Multas"},{k:"totalEv",l:"Eventos"},{k:"dataMentoria",l:"Data Mentoria"},{k:"resultado",l:"Resultado"}].map(h=>(
+                {[{k:"re",l:"RE"},{k:"nome",l:"Operador"},{k:"faltas",l:"Faltas"},{k:"atestados",l:"Atestados"},{k:"multas",l:"Multas"},{k:"totalEv",l:"Eventos"},{k:"mediaEvMes",l:"Média Ev/Mês"},{k:"evPosMentoria",l:"Ev pós mentoria"},{k:"dataMentoria",l:"Data Mentoria"},{k:"resultado",l:"Resultado"}].map(h=>(
                   <th key={h.k} style={{cursor:"pointer",userSelect:"none"}} onClick={()=>toggleSort(h.k)}>
                     {h.l} {sortCol===h.k?(sortDir==="asc"?"↑":"↓"):""}
                   </th>
                 ))}
               </tr></thead>
               <tbody>
-                {operators.filter(o=>o.resultado==="piora"||o.resultado==="andamento"||o.status==="aguardando")
-                  .map(o=>({...o, totalEv:(o.faltas||0)+(o.multas||0)+(o.acidentes||0)+(o.atestados||0)}))
+                {operators.filter(o=>o.resultado==="piora"||o.resultado==="andamento"||o.resultado==="realizou"||o.status==="aguardando")
+                  .map(o=>{
+                    const totalEv=(o.faltas||0)+(o.multas||0)+(o.acidentes||0)+(o.atestados||0);
+                    const tl=o.timeline||[];
+                    const dtMent=o.dataMentoria;
+                    // Parse mentoria date for comparison
+                    let mentDate=null;
+                    if(dtMent && dtMent!=="–"){
+                      const p=dtMent.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+                      if(p) mentDate=new Date(+p[3],+p[2]-1,+p[1]);
+                    }
+                    // Count events before and after mentoria
+                    let evAntes=0, evPos=0, mesesSet=new Set();
+                    tl.forEach(ev=>{
+                      if(ev.ev==="n") return; // skip mentoria event itself
+                      const dp=ev.data?.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+                      if(!dp) return;
+                      const evDate=new Date(+dp[3],+dp[2]-1,+dp[1]);
+                      if(mentDate){
+                        if(evDate<mentDate){
+                          evAntes++;
+                          mesesSet.add(dp[2]+"/"+dp[3]);
+                        } else {
+                          evPos++;
+                        }
+                      } else {
+                        evAntes++;
+                        mesesSet.add(dp[2]+"/"+dp[3]);
+                      }
+                    });
+                    const nMeses=mesesSet.size||1;
+                    const mediaEvMes=Math.round((evAntes/nMeses)*10)/10;
+                    return {...o, totalEv, mediaEvMes, evPosMentoria:mentDate?evPos:null};
+                  })
                   .sort((a,b)=>{
                     if(!sortCol) return 0;
                     const av=a[sortCol], bv=b[sortCol];
@@ -1118,7 +1223,6 @@ const DashboardPage = ({ data, isReal, onNav, agenda, tratativas, sessions, onVe
                   })
                   .slice(0,8).map((op,i)=>{
                   const res=op.resultado?RESULTADO_LABEL[op.resultado]:null;
-                  const totalEv=(op.faltas||0)+(op.multas||0)+(op.acidentes||0)+(op.atestados||0);
                   return (
                     <tr key={op.re+i} style={{background:selectedOp?.re===op.re?`${C.accent}10`:"transparent",cursor:"pointer"}}
                       onClick={()=>setSelectedOp(selectedOp?.re===op.re?null:op)}>
@@ -1129,7 +1233,9 @@ const DashboardPage = ({ data, isReal, onNav, agenda, tratativas, sessions, onVe
                       <td style={{ color:op.faltas>=10?C.red:op.faltas>=5?C.orange:C.muted,fontWeight:700 }}>{op.faltas}</td>
                       <td style={{ color:C.muted,fontWeight:700 }}>{op.atestados||0}</td>
                       <td style={{ color:op.multas>=5?C.red:op.multas>=3?C.orange:C.muted,fontWeight:700 }}>{op.multas}</td>
-                      <td style={{ fontWeight:700,color:totalEv>=15?C.red:totalEv>=8?C.orange:C.muted }}>{totalEv}</td>
+                      <td style={{ fontWeight:700,color:op.totalEv>=15?C.red:op.totalEv>=8?C.orange:C.muted }}>{op.totalEv}</td>
+                      <td style={{ fontWeight:600,fontSize:12,color:C.muted }}>{op.mediaEvMes}</td>
+                      <td style={{ fontWeight:700,fontSize:12,color:op.evPosMentoria===null?C.muted:op.evPosMentoria>0?C.red:C.green }}>{op.evPosMentoria===null?"—":op.evPosMentoria}</td>
                       <td style={{ fontSize:11,color:C.muted }}>{op.dataMentoria||"—"}</td>
                       <td>{res?<span className="pill" style={{ color:res.color,background:res.bg }}>{res.icon} {res.label}</span>:<span style={{color:C.muted,fontSize:11}}>—</span>}</td>
                     </tr>
@@ -1284,7 +1390,7 @@ const OperadoresPage = ({ operators, onVerFicha }) => {
 
   const tabs = [
     { id:"todos",      label:"Todos",        count:operators.length },
-    { id:"mentoria",   label:"Em Mentoria",  count:operators.filter(o=>o.status==="mentoria").length },
+    { id:"mentoria",   label:"Qtd mentorado",  count:operators.filter(o=>o.status==="mentoria").length },
     { id:"melhora",    label:"Melhoraram",   count:operators.filter(o=>o.resultado==="melhora").length },
     { id:"piora",      label:"Pioraram",     count:operators.filter(o=>o.resultado==="piora").length },
     { id:"andamento",  label:"Avaliação",    count:operators.filter(o=>o.resultado==="andamento").length },
@@ -3728,7 +3834,7 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
         ["",""],
         ["INDICADOR","VALOR"],
         ["Total de operadores", total],
-        ["Em mentoria", emMentoria],
+        ["Qtd mentorado", emMentoria],
         ["Aguardando mentoria", aguardando],
         ["Melhoraram", melhoraram],
         ["Pioraram", pioraram],
@@ -3848,7 +3954,7 @@ const RelatoriosPage = ({ data, sessions, tratativas, custos }) => {
           <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:20}} className="men-kpi-grid">
             {[
               {icon:"👥",v:total,        l:"Total Operadores",      c:C.accent  },
-              {icon:"🎯",v:emMentoria,   l:"Em Mentoria",           c:C.accent2 },
+              {icon:"🎯",v:emMentoria,   l:"Qtd mentorado",         c:C.accent2 },
               {icon:"⏳",v:aguardando,   l:"Aguardando Mentoria",   c:C.orange  },
               {icon:"✅",v:taxaMelhora+"%",l:"Taxa de Melhora",     c:C.green   },
             ].map(x=>(
@@ -5399,6 +5505,13 @@ export default function App() {
         const savedSize  = localStorage.getItem("elevamente_excel_size");
         if (savedExcel && savedName) {
           const parsed = JSON.parse(savedExcel);
+          // Rebuild evTypesSorted from eventosMes if missing (backward compat)
+          if (!parsed.evTypesSorted && parsed.eventosMes?.length) {
+            const types = new Set();
+            parsed.eventosMes.forEach(m => Object.keys(m).forEach(k => { if(k !== "mes" && k !== "total") types.add(k); }));
+            parsed.evTypesSorted = [...types].sort();
+          }
+          if (!parsed.evTypesSorted) parsed.evTypesSorted = [];
           setData(parsed);
           setIsReal(true);
           setFileName(savedName + " (restaurado)");
@@ -5446,6 +5559,7 @@ export default function App() {
           operators: result.operators,
           kpis:      result.kpis,
           eventosMes:result.eventosMes,
+          evTypesSorted:result.evTypesSorted,
           causas:    result.causas,
           sheetSummary: result.sheetSummary,
           savedAt:   new Date().toLocaleString("pt-BR"),
