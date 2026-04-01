@@ -5589,9 +5589,15 @@ export default function App() {
           const parsed = JSON.parse(savedExcel);
           // Rebuild evTypesSorted from eventosMes if missing (backward compat)
           if (!parsed.evTypesSorted && parsed.eventosMes?.length) {
+            const skip = new Set(["mes","total","_sort","faltas","multas","acidentes","mentorias"]);
             const types = new Set();
-            parsed.eventosMes.forEach(m => Object.keys(m).forEach(k => { if(k !== "mes" && k !== "total") types.add(k); }));
+            parsed.eventosMes.forEach(m => Object.keys(m).forEach(k => { if(!skip.has(k)) types.add(k); }));
             parsed.evTypesSorted = [...types].sort();
+            // If old format detected (has "faltas" key), clear cache to force re-upload
+            if (parsed.eventosMes[0]?.faltas !== undefined) {
+              parsed.eventosMes = [];
+              parsed.evTypesSorted = [];
+            }
           }
           if (!parsed.evTypesSorted) parsed.evTypesSorted = [];
           setData(parsed);
